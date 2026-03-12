@@ -16,7 +16,7 @@
     }
 
         .loading-progress circle:last-child {
-            stroke: #4F46E5;
+            stroke: #E31937;
             stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
             transition: stroke-dasharray 0.05s ease-in-out;
         }
@@ -62,224 +62,220 @@
         content: "An error has occurred."
     }
 
-/* ── Login split-screen layout ────────────────────────────────────────────── */
+/* ── Login page: TechM Orion inspired (dark + red) ────────────────────────── */
 .login-page-split {
     min-height: 100vh;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 60fr 40fr;
 }
 
-/* Left hero panel */
+/* ── Left: dark AI visual panel ────────────────────────────────────────────── */
 .login-hero-panel {
-    background: linear-gradient(155deg, #0F172A 0%, #1E1B4B 38%, #2D2A6E 65%, #1E40AF 100%);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 64px 56px;
+    background: #0D0A0C;
     position: relative;
     overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
 }
 
-.login-hero-orb {
+.login-hero-panel::before {
+    content: '';
     position: absolute;
-    border-radius: 50%;
+    inset: 0;
+    background:
+        radial-gradient(ellipse at 100% 100%, rgba(227,25,55,0.38) 0%, transparent 55%),
+        radial-gradient(ellipse at 0%   90%,  rgba(160,10,50,0.22)  0%, transparent 45%),
+        radial-gradient(ellipse at 50%  50%,  rgba(80,10,30,0.32)   0%, transparent 70%);
+    z-index: 0;
     pointer-events: none;
-    filter: blur(60px);
 }
 
-.login-hero-orb-1 {
-    width: 340px;
-    height: 340px;
-    background: rgba(129, 140, 248, 0.22);
-    top: -80px;
-    right: -80px;
-}
+.login-hero-panel > * { position: relative; z-index: 1; }
 
-.login-hero-orb-2 {
-    width: 280px;
-    height: 280px;
-    background: rgba(6, 182, 212, 0.18);
-    bottom: -60px;
-    left: -60px;
-}
-
-.login-hero-logo {
-    margin-bottom: 28px;
-    position: relative;
-    z-index: 1;
-}
-
-.login-hero-title {
-    font-size: 2.6rem;
-    font-weight: 800;
-    color: #fff;
-    letter-spacing: -0.5px;
-    margin-bottom: 12px;
-    line-height: 1.1;
-    position: relative;
-    z-index: 1;
-}
-
-.login-hero-sub {
-    font-size: 1.05rem;
-    color: rgba(255, 255, 255, 0.65);
-    line-height: 1.65;
-    margin-bottom: 44px;
-    position: relative;
-    z-index: 1;
-}
-
-.login-hero-features {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 48px 0;
+/* ── Right: dark form panel ─────────────────────────────────────────────────── */
+.login-form-panel-dark {
+    background: #2D2D2D;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    min-height: 100vh;
     position: relative;
-    z-index: 1;
+    overflow-y: auto;
 }
 
-    .login-hero-features li {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        color: rgba(255, 255, 255, 0.82);
-        font-size: 0.93rem;
-        font-family: 'Roboto', sans-serif;
-    }
-
-.login-hero-feat-icon {
-    width: 36px;
-    height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    font-size: 1rem;
-    flex-shrink: 0;
-}
-
-.login-hero-edition {
-    font-size: 0.72rem;
-    color: rgba(255, 255, 255, 0.28);
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    position: relative;
-    z-index: 1;
-}
-
-/* Right form panel */
-.login-form-panel {
-    background: #ffffff;
+/* Corner logo */
+.lp-corner-logo {
+    position: absolute;
+    top: 22px;
+    right: 22px;
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 64px 56px;
+    gap: 9px;
+    z-index: 2;
 }
 
-.login-form-inner {
-    max-width: 380px;
-    width: 100%;
-}
+.lp-logo-text { line-height: 1.1; }
+.lp-logo-l1   { display: block; font-size: 0.6rem;  font-weight: 800; color: rgba(255,255,255,0.9); letter-spacing: 1.5px; text-transform: uppercase; }
+.lp-logo-l2   { display: block; font-size: 0.68rem; font-weight: 400; color: rgba(255,255,255,0.45); }
 
-.login-form-mobile-logo {
-    display: none;
-    justify-content: center;
-    margin-bottom: 32px;
-}
-
-.login-form-heading {
-    font-size: 2rem;
-    font-weight: 800;
-    color: #0F172A;
-    letter-spacing: -0.5px;
-    margin-bottom: 8px;
-}
-
-.login-form-hint {
-    font-size: 0.95rem;
-    color: #475569;
-    margin-bottom: 40px;
-    line-height: 1.55;
-}
-
-/* Microsoft sign-in button */
-.login-ms-btn {
-    width: 100%;
+/* Body area */
+.lp-form-body {
+    padding: 70px 44px 24px;
+    flex: 1;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 14px 24px;
-    background: #ffffff;
-    border: 2px solid #E2E8F0;
-    border-radius: 10px;
+    flex-direction: column;
+}
+
+.lp-mob-logo { display: none; justify-content: center; margin-bottom: 20px; }
+.lp-heading  { font-size: 2.6rem; font-weight: 800; color: #fff; letter-spacing: -0.5px; line-height: 1.05; margin-bottom: 6px; }
+.lp-red      { color: #E31937; }
+.lp-sub      { font-size: 1rem; color: rgba(255,255,255,0.82); font-weight: 500; margin-bottom: 4px; }
+.lp-tagline  { font-size: 0.88rem; color: rgba(255,255,255,0.4); margin-bottom: 22px; }
+.lp-hr       { border: none; border-top: 1px solid rgba(255,255,255,0.10); margin: 0 0 20px; }
+.lp-already  { font-size: 0.82rem; color: rgba(255,255,255,0.45); text-align: center; margin-bottom: 12px; }
+
+/* Red primary button */
+.btn-lp-red {
+    width: 100%;
+    padding: 14px 20px;
+    background: #E31937;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
     font-size: 1rem;
-    font-weight: 600;
-    color: #0F172A;
+    font-weight: 700;
     cursor: pointer;
-    transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.07);
-    margin-bottom: 28px;
-    font-family: 'Roboto', sans-serif;
-}
-
-    .login-ms-btn:hover {
-        border-color: #4F46E5;
-        box-shadow: 0 0 0 3px rgba(79,70,229,0.15);
-        background: #FBFAFF;
-    }
-
-.login-secure-txt {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 10px;
+    font-family: 'Roboto', sans-serif;
+    letter-spacing: 0.01em;
+    transition: background 0.18s, box-shadow 0.18s;
+}
+
+.btn-lp-red:hover:not([disabled]) { background: #C41030; box-shadow: 0 4px 14px rgba(227,25,55,0.4); }
+.btn-lp-red[disabled] { opacity: 0.6; cursor: not-allowed; }
+
+/* OR divider */
+.lp-or-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 16px 0;
     font-size: 0.78rem;
-    color: #94A3B8;
+    font-weight: 700;
+    color: rgba(255,255,255,0.32);
+    letter-spacing: 1px;
+}
+
+.lp-or-row::before,
+.lp-or-row::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.12); }
+
+/* New users section */
+.lp-create-h { font-size: 1.2rem; font-weight: 700; color: #fff; margin-bottom: 6px; }
+.lp-create-p { font-size: 0.82rem; color: rgba(255,255,255,0.48); line-height: 1.55; margin-bottom: 6px; }
+
+/* Dev login inputs */
+.lp-input {
+    width: 100%;
+    padding: 13px 16px;
+    background: #404040;
+    border: 1px solid #555;
+    border-radius: 5px;
+    color: #fff;
+    font-size: 0.9rem;
+    font-family: 'Roboto', sans-serif;
+    transition: border-color 0.15s;
+    margin-bottom: 12px;
+    display: block;
+}
+
+.lp-input::placeholder { color: rgba(255,255,255,0.3); }
+.lp-input:focus        { outline: none; border-color: rgba(255,255,255,0.45); }
+
+/* Dev warning banner */
+.lp-dev-warn {
+    background: rgba(255,165,0,0.10);
+    border: 1px solid rgba(255,165,0,0.28);
+    border-radius: 5px;
+    padding: 10px 14px;
+    font-size: 0.8rem;
+    color: rgba(255,200,80,0.85);
+    margin-bottom: 14px;
+    line-height: 1.45;
     font-family: 'Roboto', sans-serif;
 }
+
+/* Dev mode caption */
+.lp-dev-note {
+    margin-top: 12px;
+    font-size: 0.74rem;
+    color: rgba(255,255,255,0.3);
+    text-align: center;
+    font-family: 'Roboto', sans-serif;
+}
+
+/* Secure note */
+.lp-secure {
+    margin-top: auto;
+    padding-top: 16px;
+    font-size: 0.74rem;
+    color: rgba(255,255,255,0.28);
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-family: 'Roboto', sans-serif;
+}
+
+/* Footer */
+.lp-form-footer {
+    padding: 14px 44px 22px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.lp-footer-p { font-size: 0.77rem; color: rgba(255,255,255,0.5); line-height: 1.5; font-weight: 600; font-family: 'Roboto', sans-serif; }
+
+/* Request Access outlined button */
+.btn-lp-outline {
+    padding: 10px 18px;
+    background: transparent;
+    border: 1.5px solid rgba(255,255,255,0.38);
+    border-radius: 5px;
+    color: rgba(255,255,255,0.8);
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: 'Roboto', sans-serif;
+    transition: border-color 0.18s, background 0.18s, color 0.18s;
+}
+
+.btn-lp-outline:hover { border-color: white; background: rgba(255,255,255,0.06); color: #fff; }
 
 /* Responsive */
+@media (max-width: 1024px) {
+    .login-page-split { grid-template-columns: 55fr 45fr; }
+}
+
 @media (max-width: 768px) {
-    .login-page-split {
-        grid-template-columns: 1fr;
-    }
-
-    .login-hero-panel {
-        padding: 48px 32px;
-    }
-
-    .login-hero-title {
-        font-size: 2rem;
-    }
-
-    .login-hero-features {
-        margin-bottom: 32px;
-    }
-
-    .login-hero-edition {
-        display: none;
-    }
-
-    .login-form-panel {
-        padding: 48px 32px;
-    }
-
-    .login-form-mobile-logo {
-        display: flex;
-    }
+    .login-page-split { grid-template-columns: 1fr; }
+    .login-hero-panel { min-height: 45vh; }
+    .lp-form-body     { padding: 60px 28px 20px; }
+    .lp-form-footer   { padding: 14px 28px 20px; flex-direction: column; align-items: flex-start; }
+    .lp-mob-logo      { display: flex; }
+    .lp-heading       { font-size: 2rem; }
 }
 
 @media (max-width: 480px) {
-    .login-hero-panel {
-        padding: 32px 20px;
-    }
-
-    .login-form-panel {
-        padding: 32px 20px;
-    }
+    .lp-form-body   { padding: 56px 20px 16px; }
+    .lp-form-footer { padding: 14px 20px 20px; }
 }
+
