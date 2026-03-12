@@ -1,5 +1,7 @@
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject NavigationManager Navigation
+@inject IConfiguration Config
+@inject IServiceProvider ServiceProvider
 
 <AuthorizeView>
     <Authorized>
@@ -7,15 +9,26 @@
             @context.User.Identity?.Name
         </MudText>
         <MudButton Color="Color.Inherit" Variant="Variant.Outlined" Size="Size.Small"
-                   OnClick="BeginLogOut">
+                   OnClick="SignOut">
             Sign out
         </MudButton>
     </Authorized>
 </AuthorizeView>
 
 @code {
-    private void BeginLogOut()
+    private async Task SignOut()
     {
+        // In dev mode the session token lives in the LocalAuthStateProvider.
+        // In production we delegate to the MSAL navigation helper.
+        if (Config.GetValue<bool>("ApiConfig:EnableDevLogin"))
+        {
+            var provider = ServiceProvider.GetService<LocalAuthStateProvider>();
+            if (provider is not null)
+            {
+                await provider.LogoutAsync();
+                return;
+            }
+        }
         Navigation.NavigateToLogout("authentication/logout");
     }
 }

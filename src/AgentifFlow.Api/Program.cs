@@ -1,9 +1,13 @@
 using AgentifFlow.Api.Data;
 using AgentifFlow.Api.Services;
 using Azure.AI.OpenAI;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Web;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +32,41 @@ builder.Services.AddMicrosoftIdentityWebApiAuthentication(builder.Configuration)
     .AddMicrosoftGraph(builder.Configuration.GetSection("Graph"))
     .AddInMemoryTokenCaches();
 
+// ── Dev local auth (development-only username/password JWT) ──────────────────
+// The LocalAuthService is always registered; it is a no-op when DevAuth:Enabled = false.
+builder.Services.AddSingleton<ILocalAuthService, LocalAuthService>();
+
+var devAuthEnabled = builder.Configuration.GetValue<bool>("DevAuth:Enabled");
+if (devAuthEnabled)
+{
+    var devJwtKey = builder.Configuration["DevAuth:JwtSigningKey"]
+        ?? throw new InvalidOperationException(
+            "DevAuth:JwtSigningKey must be configured when DevAuth:Enabled is true.");
+
+    // Add a second JWT bearer scheme that validates locally-issued dev tokens.
+    builder.Services.AddAuthentication()
+        .AddJwtBearer("DevLocal", options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidIssuer            = "agentifflow-dev",
+                ValidAudience          = "agentifflow-api",
+                IssuerSigningKey       = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(devJwtKey)),
+                ValidateLifetime       = true,
+                ClockSkew              = TimeSpan.FromSeconds(30),
+            };
+        });
+
+    // Update the default policy to accept tokens from either Azure AD or DevLocal.
+    builder.Services.AddAuthorization(options =>
+    {
+        options.DefaultPolicy = new AuthorizationPolicyBuilder(
+                JwtBearerDefaults.AuthenticationScheme, "DevLocal")
+            .RequireAuthenticatedUser()
+            .Build();
+    });
+}
+
 // ── SQL Server / EF Core ─────────────────────────────────────────────────────
 builder.Services.AddDbContext<AgentifFlowDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -48,7 +87,6 @@ builder.Services.AddScoped<ILlmService, LlmService>();
 builder.Services.AddScoped<IAgentTaskService, AgentTaskService>();
 builder.Services.AddScoped<IAppConfigurationService, AppConfigurationService>();
 
-// ── MVC / API ────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -60,7 +98,7 @@ builder.Services.AddSwaggerGen(options =>
         Description = "AgentifFlow: Azure-integrated AI agent platform with OAuth2, Graph API, LLM, and SQL database."
     });
 
-    // OAuth2 implicit flow for Swagger UI
+    // OAuth2 implicit flow for Swagger UI (Azure AD)
     var tenantId = builder.Configuration["AzureAd:TenantId"] ?? "common";
     var clientId = builder.Configuration["AzureAd:ClientId"] ?? string.Empty;
 
@@ -91,6 +129,29 @@ builder.Services.AddSwaggerGen(options =>
             [$"api://{clientId}/access_as_user"]
         }
     });
+
+    // Dev-only bearer token definition (visible in Swagger UI when DevAuth is enabled)
+    if (devAuthEnabled)
+    {
+        options.AddSecurityDefinition("DevLocal", new OpenApiSecurityScheme
+        {
+            Type        = SecuritySchemeType.Http,
+            Scheme      = "bearer",
+            BearerFormat = "JWT",
+            Description = "Development-only JWT. Obtain via POST /api/auth/local-login.",
+        });
+        options.AddSecurityRequirement(new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference
+                        { Type = ReferenceType.SecurityScheme, Id = "DevLocal" }
+                },
+                []
+            }
+        });
+    }
 });
 
 var app = builder.Build();

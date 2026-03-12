@@ -1,5 +1,8 @@
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject NavigationManager Navigation
+@inject IConfiguration Config
+@inject IServiceProvider Services
+@inject ISnackbar Snackbar
 
 <div style="min-height:100vh; background:linear-gradient(135deg,#e8f4fd 0%,#f0f4ff 100%);
             display:flex; align-items:center; justify-content:center; padding:24px;">
@@ -19,33 +22,88 @@
                 AI-powered workflow platform with Azure integration
             </MudText>
 
-            <!-- Feature list -->
-            <MudStack Spacing="2" Class="mb-8 text-left">
-                @foreach (var (icon, label) in _features)
-                {
-                    <MudPaper Elevation="0" Class="pa-3 d-flex align-center rounded"
-                              Style="background:var(--mud-palette-background-grey); gap:12px;">
-                        <MudIcon Icon="@icon" Color="Color.Primary" />
-                        <MudText Typo="Typo.body2">@label</MudText>
-                    </MudPaper>
-                }
-            </MudStack>
+            @if (_useDevLogin)
+            {
+                <!-- ── Dev local login form ─────────────────────────────── -->
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-5 text-left">
+                    <strong>Developer mode</strong> — local credentials only.
+                    Not for production use.
+                </MudAlert>
 
-            <!-- Sign-in button -->
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       FullWidth="true"
-                       Size="Size.Large"
-                       OnClick="SignIn"
-                       StartIcon="@Icons.Material.Filled.Login"
-                       Style="height:52px; font-size:1rem; border-radius:10px;">
-                Sign in with Microsoft
-            </MudButton>
+                <MudTextField @bind-Value="_username"
+                              Label="Username"
+                              Variant="Variant.Outlined"
+                              FullWidth="true"
+                              Class="mb-3"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Person"
+                              Disabled="@_logging" />
 
-            <MudText Typo="Typo.caption" Class="mt-4 d-block"
-                     Style="color:var(--mud-palette-text-disabled);">
-                Secured by Azure Active Directory OAuth&nbsp;2.0
-            </MudText>
+                <MudTextField @bind-Value="_password"
+                              Label="Password"
+                              Variant="Variant.Outlined"
+                              InputType="InputType.Password"
+                              FullWidth="true"
+                              Class="mb-5"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Lock"
+                              Disabled="@_logging"
+                              OnKeyDown="HandleKeyDown" />
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           FullWidth="true"
+                           Size="Size.Large"
+                           OnClick="DevLogin"
+                           Disabled="@_logging"
+                           Style="height:52px; font-size:1rem; border-radius:10px;">
+                    @if (_logging)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true"
+                                             Color="Color.Inherit" Class="me-2" />
+                        <span>Signing in…</span>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Login" Class="me-2" />
+                        <span>Sign In (Dev)</span>
+                    }
+                </MudButton>
+
+                <MudText Typo="Typo.caption" Class="mt-4 d-block"
+                         Style="color:var(--mud-palette-text-disabled);">
+                    Configure credentials in <code>appsettings.Development.json → DevAuth</code>
+                </MudText>
+            }
+            else
+            {
+                <!-- ── Microsoft / Azure AD sign-in ─────────────────────── -->
+                <MudStack Spacing="2" Class="mb-8 text-left">
+                    @foreach (var (icon, label) in _features)
+                    {
+                        <MudPaper Elevation="0" Class="pa-3 d-flex align-center rounded"
+                                  Style="background:var(--mud-palette-background-grey); gap:12px;">
+                            <MudIcon Icon="@icon" Color="Color.Primary" />
+                            <MudText Typo="Typo.body2">@label</MudText>
+                        </MudPaper>
+                    }
+                </MudStack>
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           FullWidth="true"
+                           Size="Size.Large"
+                           OnClick="SignIn"
+                           StartIcon="@Icons.Material.Filled.Login"
+                           Style="height:52px; font-size:1rem; border-radius:10px;">
+                    Sign in with Microsoft
+                </MudButton>
+
+                <MudText Typo="Typo.caption" Class="mt-4 d-block"
+                         Style="color:var(--mud-palette-text-disabled);">
+                    Secured by Azure Active Directory OAuth&nbsp;2.0
+                </MudText>
+            }
 
         </MudCardContent>
     </MudCard>
@@ -60,5 +118,56 @@
         (Icons.Material.Outlined.Storage,    "SQL Database persistence"),
     ];
 
+    private bool   _useDevLogin;
+    private string _username = "";
+    private string _password = "";
+    private bool   _logging;
+
+    protected override void OnInitialized()
+    {
+        _useDevLogin = Config.GetValue<bool>("ApiConfig:EnableDevLogin");
+    }
+
+    // ── OAuth2 sign-in (non-dev mode) ─────────────────────────────────────────
     private void SignIn() => Navigation.NavigateToLogin("authentication/login");
+
+    // ── Dev local sign-in ─────────────────────────────────────────────────────
+    private async Task DevLogin()
+    {
+        if (string.IsNullOrWhiteSpace(_username) || string.IsNullOrWhiteSpace(_password))
+        {
+            Snackbar.Add("Please enter both username and password.", Severity.Warning);
+            return;
+        }
+
+        _logging = true;
+        try
+        {
+            var authSvc = Services.GetRequiredService<ILocalAuthApiService>();
+            var result  = await authSvc.LoginAsync(_username, _password);
+            if (result is null)
+            {
+                Snackbar.Add(
+                    "Invalid credentials. Verify DevAuth settings in appsettings.Development.json.",
+                    Severity.Error);
+                return;
+            }
+
+            var provider = Services.GetRequiredService<LocalAuthStateProvider>();
+            await provider.LoginAsync(result.Token);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Login failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _logging = false;
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await DevLogin();
+    }
 }
