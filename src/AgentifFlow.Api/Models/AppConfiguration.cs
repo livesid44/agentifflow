@@ -88,6 +88,16 @@ public class AppConfigurationDto
     public string? UpdatedBy { get; set; }
 }
 
+/// <summary>Result of a connectivity test for an external service.</summary>
+public class ConnectivityResult
+{
+    /// <summary>True when the test succeeded; false when it failed or was not configured.</summary>
+    public bool Success { get; set; }
+
+    /// <summary>Human-readable message describing the outcome.</summary>
+    public string Message { get; set; } = string.Empty;
+}
+
 /// <summary>Request body for updating configuration.</summary>
 public class UpdateAppConfigurationRequest
 {

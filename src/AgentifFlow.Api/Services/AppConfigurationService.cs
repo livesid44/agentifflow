@@ -72,6 +72,18 @@ public class AppConfigurationService : IAppConfigurationService
         return (config?.GraphTenantId, config?.GraphClientId, config?.GraphClientSecret, config?.GraphMailboxAddress);
     }
 
+    public async Task<string?> GetBlobRawSettingsAsync()
+    {
+        var config = await _db.AppConfigurations.FirstOrDefaultAsync();
+        return config?.BlobStorageConnectionString;
+    }
+
+    public async Task<string?> GetSqlRawSettingsAsync()
+    {
+        var config = await _db.AppConfigurations.FirstOrDefaultAsync();
+        return config?.SqlConnectionString;
+    }
+
     private static AppConfigurationDto ToDto(AppConfiguration config) => new()
     {
         GraphTenantId = config.GraphTenantId,

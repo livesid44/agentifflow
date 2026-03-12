@@ -23,4 +23,11 @@ public class ConfigurationApiService : IConfigurationApiService
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<AppConfigurationDto>();
     }
+
+    public async Task<ConnectivityResult?> TestConnectivityAsync(string service)
+    {
+        var response = await _http.PostAsync($"api/connectivity/{service}", null);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ConnectivityResult>();
+    }
 }

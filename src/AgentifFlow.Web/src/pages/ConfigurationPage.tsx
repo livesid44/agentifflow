@@ -7,13 +7,27 @@ import FormField from "../components/FormField";
 import {
   getConfiguration,
   saveConfiguration,
+  testConnectivity,
 } from "../services/configurationService";
-import type { UpdateAppConfigurationRequest } from "../services/configurationTypes";
+import type {
+  UpdateAppConfigurationRequest,
+  ConnectivityResult,
+} from "../services/configurationTypes";
 
 const MASKED = "••••••••";
 const isPlaceholder = (v: string) => v === "" || v === MASKED;
 
 type SaveState = "idle" | "saving" | "saved" | "error";
+type TestState = "idle" | "testing" | "done";
+
+interface ServiceTestState {
+  state: TestState;
+  result: ConnectivityResult | null;
+}
+
+function defaultTestState(): ServiceTestState {
+  return { state: "idle", result: null };
+}
 
 export default function ConfigurationPage() {
   const { instance } = useMsal();
@@ -46,6 +60,33 @@ export default function ConfigurationPage() {
   const [activeTab, setActiveTab] = useState<
     "email" | "openai" | "blob" | "sql"
   >("email");
+
+  // ── Connectivity test state ───────────────────────────────────────────────
+  const [graphTest, setGraphTest] = useState<ServiceTestState>(defaultTestState);
+  const [openAiTest, setOpenAiTest] = useState<ServiceTestState>(defaultTestState);
+  const [blobTest, setBlobTest] = useState<ServiceTestState>(defaultTestState);
+  const [sqlTest, setSqlTest] = useState<ServiceTestState>(defaultTestState);
+
+  const getTestState = (service: "graph" | "openai" | "blob" | "sql") => {
+    switch (service) {
+      case "graph": return graphTest;
+      case "openai": return openAiTest;
+      case "blob": return blobTest;
+      case "sql": return sqlTest;
+    }
+  };
+
+  const setTestState = (
+    service: "graph" | "openai" | "blob" | "sql",
+    value: ServiceTestState
+  ) => {
+    switch (service) {
+      case "graph": setGraphTest(value); break;
+      case "openai": setOpenAiTest(value); break;
+      case "blob": setBlobTest(value); break;
+      case "sql": setSqlTest(value); break;
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -100,6 +141,58 @@ export default function ConfigurationPage() {
       setSaveState("error");
       setSaveError(err instanceof Error ? err.message : "Failed to save.");
     }
+  };
+
+  const handleTestConnectivity = async (
+    service: "graph" | "openai" | "blob" | "sql"
+  ) => {
+    setTestState(service, { state: "testing", result: null });
+    try {
+      const result = await testConnectivity(instance, service);
+      setTestState(service, { state: "done", result });
+    } catch (err) {
+      setTestState(service, {
+        state: "done",
+        result: {
+          success: false,
+          message: err instanceof Error ? err.message : "Request failed.",
+        },
+      });
+    }
+  };
+
+  const TestButton = ({
+    service,
+    label,
+  }: {
+    service: "graph" | "openai" | "blob" | "sql";
+    label: string;
+  }) => {
+    const ts = getTestState(service);
+    const isTesting = ts.state === "testing";
+    return (
+      <div style={{ marginTop: "0.75rem" }}>
+        <button
+          className={`btn btn-secondary ${isTesting ? "btn-loading" : ""}`}
+          onClick={() => handleTestConnectivity(service)}
+          disabled={isTesting}
+          style={{ marginBottom: ts.result ? "0.5rem" : 0 }}
+        >
+          {isTesting && <span className="btn-spinner" aria-hidden="true" />}
+          {isTesting ? "Testing…" : `🔌 ${label}`}
+        </button>
+        {ts.result && (
+          <div
+            className={`alert ${ts.result.success ? "alert-success" : "alert-error"}`}
+            role="status"
+            style={{ marginTop: "0.5rem" }}
+          >
+            {ts.result.success ? "✅ " : "❌ "}
+            {ts.result.message}
+          </div>
+        )}
+      </div>
+    );
   };
 
   if (loading) {
@@ -207,6 +300,7 @@ export default function ConfigurationPage() {
               placeholder="inbox@contoso.com"
               hint="Email address or UPN of the mailbox to read from and send as. Required when using application (client-credentials) permissions."
             />
+            <TestButton service="graph" label="Test Graph API Connection" />
           </ConfigSection>
         )}
 
@@ -243,6 +337,7 @@ export default function ConfigurationPage() {
               placeholder="gpt-4o"
               hint="Name of your model deployment (e.g. gpt-4o, gpt-35-turbo)."
             />
+            <TestButton service="openai" label="Test OpenAI Connection" />
           </ConfigSection>
         )}
 
@@ -270,6 +365,7 @@ export default function ConfigurationPage() {
               placeholder="agentifflow"
               hint="Name of the default blob container to use."
             />
+            <TestButton service="blob" label="Test Blob Storage Connection" />
           </ConfigSection>
         )}
 
@@ -289,6 +385,7 @@ export default function ConfigurationPage() {
               placeholder="Server=…;Database=AgentifFlowDb;…"
               hint="ADO.NET connection string for your Azure SQL or SQL Server instance."
             />
+            <TestButton service="sql" label="Test SQL Connection" />
           </ConfigSection>
         )}
 
@@ -320,3 +417,5 @@ export default function ConfigurationPage() {
     </>
   );
 }
+
+

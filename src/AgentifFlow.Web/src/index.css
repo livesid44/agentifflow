@@ -83,6 +83,13 @@ body {
 }
 .btn-outline:hover:not(:disabled) { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.6); }
 
+.btn-secondary {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  color: var(--text-primary);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--surface-raised); }
+
 .btn-sm { padding: 5px 14px; font-size: 0.82rem; }
 .btn-loading { opacity: 0.8; }
 
@@ -316,6 +323,7 @@ body {
 /* ── Alerts ──────────────────────────────────────────────────────────────── */
 .alert { padding: 12px 16px; border-radius: var(--radius-sm); font-size: 0.88rem; }
 .alert-error { background: var(--error-bg); color: var(--error); border: 1px solid #FECACA; }
+.alert-success { background: #ECFDF5; color: var(--success); border: 1px solid #A7F3D0; }
 .mb-4 { margin-bottom: 16px; }
 
 /* ── Loading spinner ─────────────────────────────────────────────────────── */

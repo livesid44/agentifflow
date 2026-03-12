@@ -54,3 +54,10 @@ public static class ConfigurationConstants
     public static bool IsPlaceholder(string? value) =>
         string.IsNullOrEmpty(value) || value == MaskedSecret;
 }
+
+/// <summary>Result of a connectivity test returned by POST /api/connectivity/{service}.</summary>
+public class ConnectivityResult
+{
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
+}

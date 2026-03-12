@@ -3,6 +3,7 @@ import { apiBaseUrl, apiRequest } from "../authConfig";
 import type {
   AppConfigurationDto,
   UpdateAppConfigurationRequest,
+  ConnectivityResult,
 } from "./configurationTypes";
 
 async function getAccessToken(msalInstance: IPublicClientApplication): Promise<string> {
@@ -42,4 +43,17 @@ export async function saveConfiguration(
   });
   if (!response.ok) throw new Error(`Failed to save configuration: ${response.statusText}`);
   return response.json() as Promise<AppConfigurationDto>;
+}
+
+export async function testConnectivity(
+  msalInstance: IPublicClientApplication,
+  service: "graph" | "openai" | "blob" | "sql"
+): Promise<ConnectivityResult> {
+  const token = await getAccessToken(msalInstance);
+  const response = await fetch(`${apiBaseUrl}/api/connectivity/${service}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(`Connectivity test failed: ${response.statusText}`);
+  return response.json() as Promise<ConnectivityResult>;
 }

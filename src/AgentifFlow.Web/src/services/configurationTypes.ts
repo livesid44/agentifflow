@@ -35,3 +35,8 @@ export interface UpdateAppConfigurationRequest {
   maxRetryCount?: number;
   notificationEmail?: string;
 }
+
+export interface ConnectivityResult {
+  success: boolean;
+  message: string;
+}

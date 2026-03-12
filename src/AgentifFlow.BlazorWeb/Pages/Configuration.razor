@@ -67,6 +67,9 @@ else
                                   HelperText="Email address or UPN of the mailbox to read from and send as. Required when using application (client-credentials) permissions."
                                   Variant="Variant.Outlined" FullWidth="true" />
                 </MudItem>
+                <MudItem xs="12">
+                    @RenderTestButton("graph", "Test Graph API Connection")
+                </MudItem>
             </MudGrid>
         </MudTabPanel>
 
@@ -96,6 +99,9 @@ else
                                   HelperText="Name of your model deployment (e.g. gpt-4o, gpt-35-turbo)."
                                   Variant="Variant.Outlined" FullWidth="true" />
                 </MudItem>
+                <MudItem xs="12">
+                    @RenderTestButton("openai", "Test OpenAI Connection")
+                </MudItem>
             </MudGrid>
         </MudTabPanel>
 
@@ -117,6 +123,9 @@ else
                                   HelperText="Name of the default blob container to use."
                                   Variant="Variant.Outlined" FullWidth="true" />
                 </MudItem>
+                <MudItem xs="12">
+                    @RenderTestButton("blob", "Test Blob Storage Connection")
+                </MudItem>
             </MudGrid>
         </MudTabPanel>
 
@@ -130,6 +139,9 @@ else
                                   Placeholder="Server=…;Database=AgentifFlowDb;…"
                                   HelperText="ADO.NET connection string for your Azure SQL or SQL Server instance."
                                   Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+                <MudItem xs="12">
+                    @RenderTestButton("sql", "Test SQL Connection")
                 </MudItem>
             </MudGrid>
         </MudTabPanel>
@@ -194,6 +206,10 @@ else
     private bool _saving;
     private bool _saved;
     private string? _savedAt;
+
+    // ── Connectivity test state (keyed by service name) ───────────────────────
+    private readonly Dictionary<string, bool> _testing = new();
+    private readonly Dictionary<string, (bool Success, string Message)> _testResults = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -268,4 +284,59 @@ else
             _saving = false;
         }
     }
+
+    private async Task HandleTestConnection(string service)
+    {
+        _testing[service] = true;
+        _testResults.Remove(service);
+        StateHasChanged();
+
+        try
+        {
+            var result = await ConfigService.TestConnectivityAsync(service);
+            _testResults[service] = (result?.Success ?? false, result?.Message ?? "No response from server.");
+        }
+        catch (Exception ex)
+        {
+            _testResults[service] = (false, $"Request failed: {ex.Message}");
+        }
+        finally
+        {
+            _testing[service] = false;
+            StateHasChanged();
+        }
+    }
+
+    private RenderFragment RenderTestButton(string service, string label) => __builder =>
+    {
+        var isTesting = _testing.TryGetValue(service, out var t) && t;
+        var hasResult = _testResults.TryGetValue(service, out var result);
+
+        <div class="d-flex flex-column gap-2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Secondary"
+                       Size="Size.Medium"
+                       OnClick="@(() => HandleTestConnection(service))"
+                       Disabled="@isTesting"
+                       StartIcon="@(isTesting ? null : Icons.Material.Outlined.NetworkCheck)">
+                @if (isTesting)
+                {
+                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"
+                                         Color="Color.Inherit" />
+                    <span class="ms-2">Testing…</span>
+                }
+                else
+                {
+                    <span>@label</span>
+                }
+            </MudButton>
+            @if (hasResult)
+            {
+                <MudAlert Severity="@(result.Success ? Severity.Success : Severity.Error)"
+                          Dense="true" Class="mt-1">
+                    @result.Message
+                </MudAlert>
+            }
+        </div>
+    };
 }

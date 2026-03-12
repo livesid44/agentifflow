@@ -20,4 +20,10 @@ public interface IAppConfigurationService
     /// These values are never returned to the browser.
     /// </summary>
     Task<(string? TenantId, string? ClientId, string? ClientSecret, string? MailboxAddress)> GetGraphRawSettingsAsync();
+
+    /// <summary>Returns the raw (unmasked) Blob Storage connection string. Never sent to the browser.</summary>
+    Task<string?> GetBlobRawSettingsAsync();
+
+    /// <summary>Returns the raw (unmasked) SQL connection string. Never sent to the browser.</summary>
+    Task<string?> GetSqlRawSettingsAsync();
 }
