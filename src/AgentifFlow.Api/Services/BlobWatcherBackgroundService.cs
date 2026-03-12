@@ -35,6 +35,9 @@ public class BlobWatcherBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // Record when this cycle starts so we can honour the exact interval
+            // even if processing takes some time.
+            var cycleStart = DateTime.UtcNow;
             int pollInterval = 60;
 
             try
@@ -65,7 +68,7 @@ public class BlobWatcherBackgroundService : BackgroundService
                 }
 
                 // ── 2. Inbox reply scan ───────────────────────────────────────
-                await PollInboxForRepliesAsync(scope.ServiceProvider, db, stoppingToken);
+                await PollInboxForRepliesAsync(scope.ServiceProvider, config, db, stoppingToken);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
@@ -73,7 +76,12 @@ public class BlobWatcherBackgroundService : BackgroundService
                 _logger.LogError(ex, "Error in BlobWatcherBackgroundService poll cycle.");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(pollInterval), stoppingToken);
+            // Wait only the time remaining in the interval so the period stays accurate
+            // regardless of how long processing took.
+            var elapsed  = DateTime.UtcNow - cycleStart;
+            var waitTime = TimeSpan.FromSeconds(pollInterval) - elapsed;
+            if (waitTime > TimeSpan.Zero)
+                await Task.Delay(waitTime, stoppingToken);
         }
 
         _logger.LogInformation("BlobWatcherBackgroundService stopped.");
@@ -98,12 +106,36 @@ public class BlobWatcherBackgroundService : BackgroundService
         var llmService           = services.GetRequiredService<ILlmService>();
         var mailService          = services.GetRequiredService<IGraphMailService>();
 
+        // ── Agent Designer file-name filter ───────────────────────────────────
+        // When a BlobInputFilePattern is configured we only pick up blobs whose
+        // file name (without extension) matches the expected name.  When the
+        // "append date" flag is set, the expected name also contains today's date
+        // in yyyyMMdd format.
+        string? expectedBlobName = null;
+        if (!string.IsNullOrWhiteSpace(config.BlobInputFilePattern))
+        {
+            var baseName = config.BlobInputFilePattern.TrimEnd('_');
+            expectedBlobName = config.BlobInputAppendDate
+                ? $"{baseName}_{DateTime.UtcNow:yyyyMMdd}.csv"
+                : $"{baseName}.csv";
+        }
+
         int csvFilesDetected = 0;
 
         await foreach (BlobItem blob in containerClient.GetBlobsAsync(cancellationToken: ct))
         {
             if (!blob.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
                 continue;
+
+            // Skip blobs that don't match the configured file-name pattern.
+            if (expectedBlobName is not null &&
+                !string.Equals(blob.Name, expectedBlobName, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogDebug(
+                    "Skipping blob '{BlobName}' — does not match expected pattern '{Expected}'.",
+                    blob.Name, expectedBlobName);
+                continue;
+            }
 
             csvFilesDetected++;
 
@@ -136,7 +168,12 @@ public class BlobWatcherBackgroundService : BackgroundService
 
         // Send a "no CSV files found" alert if nothing was detected this cycle
         if (csvFilesDetected == 0 && retryJobs.Count == 0)
-            await SendNoFileNotificationAsync(services, config, db, ct);
+        {
+            if (config.NotifyOnFileNotFound)
+                await SendNoFileNotificationAsync(services, config, db, ct);
+            else
+                _logger.LogDebug("No matching blobs found this cycle; NotifyOnFileNotFound is disabled.");
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -241,10 +278,13 @@ public class BlobWatcherBackgroundService : BackgroundService
     // Inbox reply polling
     // Each poll cycle: fetch recent unread messages, match subject against known
     // notification refs, record reply, and mark the message as read.
+    // When a reply is for a "no file found" or "validation failed" job, trigger
+    // a fresh blob scan / re-process so the agent resumes automatically.
     // ──────────────────────────────────────────────────────────────────────────
 
     private async Task PollInboxForRepliesAsync(
         IServiceProvider services,
+        AppConfiguration config,
         AgentifFlowDbContext db,
         CancellationToken ct)
     {
@@ -298,6 +338,28 @@ public class BlobWatcherBackgroundService : BackgroundService
             {
                 _logger.LogWarning(ex, "Could not mark reply message {MsgId} as read.", reply.Id);
             }
+
+            // ── Re-trigger processing based on job type ─────────────────────
+            if (!string.IsNullOrWhiteSpace(config.BlobStorageConnectionString) &&
+                !string.IsNullOrWhiteSpace(config.BlobContainerName))
+            {
+                if (job.BlobName == NoFileBlobName || job.BlobName == BlobNotConfiguredBlobName)
+                {
+                    // For sentinel "no-file" jobs the reply means the user has uploaded
+                    // the file — kick off a fresh blob scan immediately.
+                    _logger.LogInformation(
+                        "Reply for sentinel job {JobId} — triggering immediate blob re-scan.", job.Id);
+                    await PollBlobStorageAsync(services, config, db, ct);
+                }
+                else
+                {
+                    // For real-file jobs (validation failure, SQL failure …) the user has
+                    // (presumably) replaced the file in blob storage — re-process the same blob.
+                    _logger.LogInformation(
+                        "Reply for file job {JobId} ('{Blob}') — scheduling retry.", job.Id, job.BlobName);
+                    await jobService.IncrementRetryAsync(job.Id);
+                }
+            }
         }
     }
 
@@ -329,16 +391,19 @@ public class BlobWatcherBackgroundService : BackgroundService
             await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
                 $"Download failed: {ex.Message}", "Blob download error.");
 
-            var dlRef = GenerateRef();
-            await jobService.SetNotificationRefAsync(job.Id, dlRef);
-            await TrySendEmailAsync(mailService, config.NotificationEmail,
-                $"[AgentifFlow] Failed to Download File: {blobName} [Ref: {dlRef}]",
-                $"The AgentifFlow agent could not download \"{blobName}\" " +
-                $"from container \"{config.BlobContainerName}\".\n\n" +
-                $"Error: {ex.Message}\n\n" +
-                "Please verify the file exists and the storage account is accessible.\n\n" +
-                $"Reply to this email on this thread once the issue is resolved.\n\nReference: {dlRef}",
-                $"download-failure [{dlRef}]");
+            if (config.NotifyOnDataIssue)
+            {
+                var dlRef = GenerateRef();
+                await jobService.SetNotificationRefAsync(job.Id, dlRef);
+                await TrySendEmailAsync(mailService, config.NotificationEmail,
+                    $"[AgentifFlow] Failed to Download File: {blobName} [Ref: {dlRef}]",
+                    $"The AgentifFlow agent could not download \"{blobName}\" " +
+                    $"from container \"{config.BlobContainerName}\".\n\n" +
+                    $"Error: {ex.Message}\n\n" +
+                    "Please verify the file exists and the storage account is accessible.\n\n" +
+                    $"Reply to this email on this thread once the issue is resolved.\n\nReference: {dlRef}",
+                    $"download-failure [{dlRef}]");
+            }
             return;
         }
 
@@ -381,50 +446,118 @@ public class BlobWatcherBackgroundService : BackgroundService
                 "the agent monitors this reference and will automatically re-process the file.\n\n" +
                 $"Reference: {valRef}";
 
-            bool sent = await TrySendEmailAsync(mailService, config.NotificationEmail,
-                $"[AgentifFlow] CSV Validation Failed: {blobName} [Ref: {valRef}]",
-                emailBody,
-                $"validation-failure [{valRef}]");
+            bool sent = false;
+            if (config.NotifyOnDataIssue)
+            {
+                sent = await TrySendEmailAsync(mailService, config.NotificationEmail,
+                    $"[AgentifFlow] CSV Validation Failed: {blobName} [Ref: {valRef}]",
+                    emailBody,
+                    $"validation-failure [{valRef}]");
+            }
 
             await jobService.SetNotificationRefAsync(job.Id, valRef);
             await jobService.UpdateStatusAsync(job.Id,
                 sent ? BlobWatcherJobStatus.AwaitingApproval : BlobWatcherJobStatus.ValidationFailed,
                 logEntry: sent
                     ? $"Notification sent to {config.NotificationEmail} [Ref: {valRef}]. Awaiting reply."
-                    : "Notification skipped (NotificationEmail not configured).");
+                    : "Notification skipped (NotifyOnDataIssue disabled or NotificationEmail not configured).");
             return;
         }
 
         // ── 3. Insert into SQL ────────────────────────────────────────────────
-        await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Inserting,
-            logEntry: $"Validation passed ({validationResult.RowCount} rows). Starting SQL insert.");
-
-        try
+        // Only perform SQL push when SqlPushEnabled is true (Agent Designer).
+        if (config.SqlPushEnabled && !string.IsNullOrWhiteSpace(config.SqlConnectionString))
         {
-            int rowsInserted = await InsertCsvToSqlAsync(csvContent, blobName, config);
-            await jobService.SetRowsInsertedAsync(job.Id, rowsInserted);
-            await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Completed,
-                logEntry: $"Successfully inserted {rowsInserted} rows into SQL.");
-            _logger.LogInformation("Completed {BlobName}: {Rows} rows inserted.", blobName, rowsInserted);
+            await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Inserting,
+                logEntry: $"Validation passed ({validationResult.RowCount} rows). Starting SQL insert.");
+
+            try
+            {
+                int rowsInserted = await InsertCsvToSqlAsync(csvContent, blobName, config);
+                await jobService.SetRowsInsertedAsync(job.Id, rowsInserted);
+                _logger.LogInformation("Completed {BlobName}: {Rows} rows inserted.", blobName, rowsInserted);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SQL insert failed for {BlobName}", blobName);
+                await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
+                    $"SQL insert failed: {ex.Message}", $"SQL insert error: {ex.Message}");
+
+                if (config.NotifyOnDataIssue)
+                {
+                    var sqlRef = GenerateRef();
+                    await jobService.SetNotificationRefAsync(job.Id, sqlRef);
+                    await TrySendEmailAsync(mailService, config.NotificationEmail,
+                        $"[AgentifFlow] SQL Insert Failed: {blobName} [Ref: {sqlRef}]",
+                        $"The CSV file \"{blobName}\" passed validation but could not be inserted into " +
+                        $"the database.\n\nError: {ex.Message}\n\n" +
+                        "Please check the SQL connection string and ensure the database is reachable.\n\n" +
+                        $"Reply to this email on this thread once the issue is resolved.\n\nReference: {sqlRef}",
+                        $"sql-failure [{sqlRef}]");
+                }
+
+                if (job.RetryCount < config.MaxRetryCount)
+                    await jobService.IncrementRetryAsync(job.Id);
+                return;
+            }
         }
-        catch (Exception ex)
+        else
         {
-            _logger.LogError(ex, "SQL insert failed for {BlobName}", blobName);
-            await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
-                $"SQL insert failed: {ex.Message}", $"SQL insert error: {ex.Message}");
+            await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Inserting,
+                logEntry: config.SqlPushEnabled
+                    ? $"Validation passed ({validationResult.RowCount} rows). SQL push skipped — connection string not configured."
+                    : $"Validation passed ({validationResult.RowCount} rows). SQL push is disabled in Agent Designer.");
+        }
 
-            var sqlRef = GenerateRef();
-            await jobService.SetNotificationRefAsync(job.Id, sqlRef);
+        // ── 4. Archive rename ─────────────────────────────────────────────────
+        // After a successful upload, rename the blob to the configured archive
+        // pattern (e.g. "archive_test_20260312.csv") if one is defined.
+        if (!string.IsNullOrWhiteSpace(config.BlobArchiveFilePattern))
+        {
+            var archiveBase = config.BlobArchiveFilePattern.TrimEnd('_');
+            var archiveName = config.BlobArchiveAppendDate
+                ? $"{archiveBase}_{DateTime.UtcNow:yyyyMMdd}.csv"
+                : $"{archiveBase}.csv";
+
+            try
+            {
+                var sourceBlob = container.GetBlobClient(blobName);
+                var destBlob   = container.GetBlobClient(archiveName);
+
+                // Copy → delete (Azure Blob Storage does not have a rename primitive)
+                await destBlob.StartCopyFromUriAsync(sourceBlob.Uri, cancellationToken: ct);
+                await sourceBlob.DeleteIfExistsAsync(cancellationToken: ct);
+
+                await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Completed,
+                    logEntry: $"File renamed to '{archiveName}' after successful processing.");
+                _logger.LogInformation(
+                    "Blob '{Source}' archived as '{Archive}'.", blobName, archiveName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Archive rename failed for '{BlobName}'.", blobName);
+                await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Completed,
+                    logEntry: $"Processing complete but archive rename to '{archiveName}' failed: {ex.Message}");
+            }
+        }
+        else
+        {
+            await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Completed,
+                logEntry: "Processing completed successfully (no archive pattern configured).");
+        }
+
+        _logger.LogInformation("Completed processing blob '{BlobName}'.", blobName);
+
+        // ── 5. Success notification ───────────────────────────────────────────
+        if (config.NotifyOnSuccess)
+        {
             await TrySendEmailAsync(mailService, config.NotificationEmail,
-                $"[AgentifFlow] SQL Insert Failed: {blobName} [Ref: {sqlRef}]",
-                $"The CSV file \"{blobName}\" passed validation but could not be inserted into " +
-                $"the database.\n\nError: {ex.Message}\n\n" +
-                "Please check the SQL connection string and ensure the database is reachable.\n\n" +
-                $"Reply to this email on this thread once the issue is resolved.\n\nReference: {sqlRef}",
-                $"sql-failure [{sqlRef}]");
-
-            if (job.RetryCount < config.MaxRetryCount)
-                await jobService.IncrementRetryAsync(job.Id);
+                $"[AgentifFlow] File Processed Successfully: {blobName}",
+                $"The AgentifFlow agent has successfully processed the file \"{blobName}\".\n\n" +
+                $"Container: {config.BlobContainerName}\n" +
+                (config.SqlPushEnabled ? $"Rows inserted: {(await jobService.GetByIdAsync(job.Id))?.RowsInserted ?? 0}\n" : "") +
+                $"Processed at: {DateTime.UtcNow:u}",
+                $"success [{blobName}]");
         }
     }
 
@@ -490,30 +623,66 @@ public class BlobWatcherBackgroundService : BackgroundService
 
         if (lines.Length < 2) return 0;
 
-        var headers   = SplitCsvLine(lines[0]);
-        var tableName = System.Text.RegularExpressions.Regex
-            .Replace(System.IO.Path.GetFileNameWithoutExtension(blobName), @"[^A-Za-z0-9_]", "_");
+        var csvHeaders = SplitCsvLine(lines[0]);
+
+        // ── Column mapping (Agent Designer) ───────────────────────────────────
+        // When SqlColumnMappingJson is configured, map CSV source column names to
+        // SQL target column names.  Any CSV column not present in the mapping is
+        // still inserted using its original name.
+        Dictionary<string, string> colMap = new(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(config.SqlColumnMappingJson))
+        {
+            try
+            {
+                var mappings = System.Text.Json.JsonSerializer.Deserialize<List<ColumnMapEntry>>(
+                    config.SqlColumnMappingJson,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (mappings is not null)
+                    foreach (var m in mappings)
+                        if (!string.IsNullOrWhiteSpace(m.Source) && !string.IsNullOrWhiteSpace(m.Target))
+                            colMap[m.Source] = m.Target;
+            }
+            catch { /* ignore malformed mapping JSON — fall back to identity mapping */ }
+        }
+
+        // Resolve SQL column names from CSV headers using the mapping (identity fallback)
+        var sqlColumns = csvHeaders
+            .Select(h => colMap.TryGetValue(h, out var mapped) ? mapped : h)
+            .ToArray();
+
+        // ── Table name ────────────────────────────────────────────────────────
+        // Use the configured target table when set; fall back to a sanitised version
+        // of the blob file name.
+        var tableName = !string.IsNullOrWhiteSpace(config.SqlTargetTable)
+            ? config.SqlTargetTable   // use as-is (e.g. "dbo.MyTable")
+            : System.Text.RegularExpressions.Regex
+                .Replace(System.IO.Path.GetFileNameWithoutExtension(blobName), @"[^A-Za-z0-9_]", "_");
 
         using var connection = new Microsoft.Data.SqlClient.SqlConnection(config.SqlConnectionString);
         await connection.OpenAsync();
 
-        var createCols = string.Join(", ", headers.Select(h => $"[{h}] NVARCHAR(MAX)"));
-        var createSql  =
-            $"IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='{tableName}' AND xtype='U') " +
-            $"CREATE TABLE [{tableName}] ({createCols})";
-        using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(createSql, connection))
-            await cmd.ExecuteNonQueryAsync();
+        // Create the table if it does not exist (simple schema based on mapped column names)
+        if (string.IsNullOrWhiteSpace(config.SqlTargetTable))
+        {
+            // Only auto-create tables that were derived from the file name (no schema prefix)
+            var createCols = string.Join(", ", sqlColumns.Select(h => $"[{h}] NVARCHAR(MAX)"));
+            var createSql  =
+                $"IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='{tableName}' AND xtype='U') " +
+                $"CREATE TABLE [{tableName}] ({createCols})";
+            using var createCmd = new Microsoft.Data.SqlClient.SqlCommand(createSql, connection);
+            await createCmd.ExecuteNonQueryAsync();
+        }
 
         int inserted = 0;
         for (int i = 1; i < lines.Length; i++)
         {
             var cols      = SplitCsvLine(lines[i]);
-            var paramList = string.Join(", ", headers.Select((_, idx) => $"@p{idx}"));
-            var colList   = string.Join(", ", headers.Select(h => $"[{h}]"));
-            var insertSql = $"INSERT INTO [{tableName}] ({colList}) VALUES ({paramList})";
+            var paramList = string.Join(", ", sqlColumns.Select((_, idx) => $"@p{idx}"));
+            var colList   = string.Join(", ", sqlColumns.Select(h => $"[{h}]"));
+            var insertSql = $"INSERT INTO {tableName} ({colList}) VALUES ({paramList})";
 
             using var cmd = new Microsoft.Data.SqlClient.SqlCommand(insertSql, connection);
-            for (int j = 0; j < headers.Length; j++)
+            for (int j = 0; j < csvHeaders.Length; j++)
                 cmd.Parameters.AddWithValue($"@p{j}", j < cols.Length ? (object)cols[j] : DBNull.Value);
             await cmd.ExecuteNonQueryAsync();
             inserted++;
@@ -536,5 +705,12 @@ public class BlobWatcherBackgroundService : BackgroundService
         }
         fields.Add(current.ToString().Trim());
         return [.. fields];
+    }
+
+    /// <summary>Represents a single row in the Agent Designer column-mapping table.</summary>
+    private sealed class ColumnMapEntry
+    {
+        public string Source { get; set; } = "";
+        public string Target { get; set; } = "";
     }
 }
