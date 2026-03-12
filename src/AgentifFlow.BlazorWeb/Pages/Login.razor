@@ -4,28 +4,66 @@
 @inject IServiceProvider Services
 @inject ISnackbar Snackbar
 
-<div style="min-height:100vh; background:linear-gradient(135deg,#e8f4fd 0%,#f0f4ff 100%);
-            display:flex; align-items:center; justify-content:center; padding:24px;">
-    <MudCard Elevation="4"
-             Style="max-width:440px; width:100%; border-radius:18px; text-align:center;">
-        <MudCardContent Class="pa-10">
+<div class="login-page-split">
 
-            <!-- Logo -->
-            <MudAvatar Color="Color.Primary" Style="width:72px;height:72px;margin:0 auto 20px;"
-                       Rounded="true">
-                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="font-size:2rem;" />
-            </MudAvatar>
+    <!-- ── Left Hero Panel ──────────────────────────────────────────────── -->
+    <div class="login-hero-panel">
+        <div class="login-hero-orb login-hero-orb-1"></div>
+        <div class="login-hero-orb login-hero-orb-2"></div>
 
-            <MudText Typo="Typo.h4" Class="mb-2" Style="font-weight:800;">AgentifFlow</MudText>
-            <MudText Typo="Typo.subtitle1" Class="mb-6"
-                     Style="color:var(--mud-palette-text-secondary);">
-                AI-powered workflow platform with Azure integration
-            </MudText>
+        <!-- Logo mark -->
+        <div class="login-hero-logo">
+            <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                <rect width="56" height="56" rx="15"
+                      fill="rgba(255,255,255,0.10)"
+                      stroke="rgba(255,255,255,0.18)" stroke-width="1" />
+                <path d="M14 42 L28 13 L42 42"
+                      stroke="white" stroke-width="3.5"
+                      stroke-linecap="round" stroke-linejoin="round" />
+                <circle cx="28" cy="33" r="5.5" fill="white" />
+            </svg>
+        </div>
+
+        <h1 class="login-hero-title">AgentifFlow</h1>
+        <p class="login-hero-sub">
+            AI-powered workflow automation<br />
+            with Azure integration
+        </p>
+
+        <ul class="login-hero-features">
+            <li><span class="login-hero-feat-icon">📧</span> Microsoft 365 Mail via Graph API</li>
+            <li><span class="login-hero-feat-icon">🤖</span> Azure OpenAI LLM integration</li>
+            <li><span class="login-hero-feat-icon">☁️</span> Azure Blob Storage monitoring</li>
+            <li><span class="login-hero-feat-icon">🗄️</span> SQL Database persistence</li>
+        </ul>
+
+        <p class="login-hero-edition">Enterprise Edition</p>
+    </div>
+
+    <!-- ── Right Form Panel ─────────────────────────────────────────────── -->
+    <div class="login-form-panel">
+
+        <!-- Mobile-only logo (hidden on desktop where the hero panel shows) -->
+        <div class="login-form-mobile-logo">
+            <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
+                <rect width="44" height="44" rx="12" fill="#4F46E5" />
+                <path d="M11 33 L22 10 L33 33"
+                      stroke="white" stroke-width="3"
+                      stroke-linecap="round" stroke-linejoin="round" />
+                <circle cx="22" cy="25" r="4.5" fill="white" />
+            </svg>
+        </div>
+
+        <div class="login-form-inner">
+            <h2 class="login-form-heading">Welcome back</h2>
+            <p class="login-form-hint">
+                Sign in with your Microsoft account to access the platform
+            </p>
 
             @if (_useDevLogin)
             {
                 <!-- ── Dev local login form ─────────────────────────────── -->
-                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-5 text-left">
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-5">
                     <strong>Developer mode</strong> — local credentials only.
                     Not for production use.
                 </MudAlert>
@@ -78,46 +116,29 @@
             else
             {
                 <!-- ── Microsoft / Azure AD sign-in ─────────────────────── -->
-                <MudStack Spacing="2" Class="mb-8 text-left">
-                    @foreach (var (icon, label) in _features)
-                    {
-                        <MudPaper Elevation="0" Class="pa-3 d-flex align-center rounded"
-                                  Style="background:var(--mud-palette-background-grey); gap:12px;">
-                            <MudIcon Icon="@icon" Color="Color.Primary" />
-                            <MudText Typo="Typo.body2">@label</MudText>
-                        </MudPaper>
-                    }
-                </MudStack>
+                <button class="login-ms-btn" @onclick="SignIn">
+                    <svg width="21" height="21" viewBox="0 0 21 21" fill="none">
+                        <rect x="1"  y="1"  width="9" height="9" fill="#f25022" />
+                        <rect x="11" y="1"  width="9" height="9" fill="#7fba00" />
+                        <rect x="1"  y="11" width="9" height="9" fill="#00a4ef" />
+                        <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+                    </svg>
+                    <span>Sign in with Microsoft</span>
+                </button>
 
-                <MudButton Variant="Variant.Filled"
-                           Color="Color.Primary"
-                           FullWidth="true"
-                           Size="Size.Large"
-                           OnClick="SignIn"
-                           StartIcon="@Icons.Material.Filled.Login"
-                           Style="height:52px; font-size:1rem; border-radius:10px;">
-                    Sign in with Microsoft
-                </MudButton>
-
-                <MudText Typo="Typo.caption" Class="mt-4 d-block"
-                         Style="color:var(--mud-palette-text-disabled);">
-                    Secured by Azure Active Directory OAuth&nbsp;2.0
-                </MudText>
+                <p class="login-secure-txt">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
+                    </svg>
+                    Secured by Azure Active Directory OAuth 2.0
+                </p>
             }
+        </div>
+    </div>
 
-        </MudCardContent>
-    </MudCard>
 </div>
 
 @code {
-    private static readonly (string Icon, string Label)[] _features =
-    [
-        (Icons.Material.Outlined.Email,      "Microsoft 365 Mail via Graph API"),
-        (Icons.Material.Outlined.Psychology, "Azure OpenAI LLM integration"),
-        (Icons.Material.Outlined.Cloud,      "Azure Blob Storage"),
-        (Icons.Material.Outlined.Storage,    "SQL Database persistence"),
-    ];
-
     private bool   _useDevLogin;
     private string _username = "";
     private string _password = "";

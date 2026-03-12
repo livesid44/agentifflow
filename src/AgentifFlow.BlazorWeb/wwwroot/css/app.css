@@ -16,7 +16,7 @@
     }
 
         .loading-progress circle:last-child {
-            stroke: #0078d4;
+            stroke: #4F46E5;
             stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
             transition: stroke-dasharray 0.05s ease-in-out;
         }
@@ -61,3 +61,225 @@
     .blazor-error-boundary::after {
         content: "An error has occurred."
     }
+
+/* ── Login split-screen layout ────────────────────────────────────────────── */
+.login-page-split {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+/* Left hero panel */
+.login-hero-panel {
+    background: linear-gradient(155deg, #0F172A 0%, #1E1B4B 38%, #2D2A6E 65%, #1E40AF 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 56px;
+    position: relative;
+    overflow: hidden;
+}
+
+.login-hero-orb {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(60px);
+}
+
+.login-hero-orb-1 {
+    width: 340px;
+    height: 340px;
+    background: rgba(129, 140, 248, 0.22);
+    top: -80px;
+    right: -80px;
+}
+
+.login-hero-orb-2 {
+    width: 280px;
+    height: 280px;
+    background: rgba(6, 182, 212, 0.18);
+    bottom: -60px;
+    left: -60px;
+}
+
+.login-hero-logo {
+    margin-bottom: 28px;
+    position: relative;
+    z-index: 1;
+}
+
+.login-hero-title {
+    font-size: 2.6rem;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.5px;
+    margin-bottom: 12px;
+    line-height: 1.1;
+    position: relative;
+    z-index: 1;
+}
+
+.login-hero-sub {
+    font-size: 1.05rem;
+    color: rgba(255, 255, 255, 0.65);
+    line-height: 1.65;
+    margin-bottom: 44px;
+    position: relative;
+    z-index: 1;
+}
+
+.login-hero-features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 48px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: relative;
+    z-index: 1;
+}
+
+    .login-hero-features li {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 0.93rem;
+        font-family: 'Roboto', sans-serif;
+    }
+
+.login-hero-feat-icon {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.login-hero-edition {
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.28);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    position: relative;
+    z-index: 1;
+}
+
+/* Right form panel */
+.login-form-panel {
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 64px 56px;
+}
+
+.login-form-inner {
+    max-width: 380px;
+    width: 100%;
+}
+
+.login-form-mobile-logo {
+    display: none;
+    justify-content: center;
+    margin-bottom: 32px;
+}
+
+.login-form-heading {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #0F172A;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+}
+
+.login-form-hint {
+    font-size: 0.95rem;
+    color: #475569;
+    margin-bottom: 40px;
+    line-height: 1.55;
+}
+
+/* Microsoft sign-in button */
+.login-ms-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 14px 24px;
+    background: #ffffff;
+    border: 2px solid #E2E8F0;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0F172A;
+    cursor: pointer;
+    transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+    margin-bottom: 28px;
+    font-family: 'Roboto', sans-serif;
+}
+
+    .login-ms-btn:hover {
+        border-color: #4F46E5;
+        box-shadow: 0 0 0 3px rgba(79,70,229,0.15);
+        background: #FBFAFF;
+    }
+
+.login-secure-txt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: #94A3B8;
+    font-family: 'Roboto', sans-serif;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .login-page-split {
+        grid-template-columns: 1fr;
+    }
+
+    .login-hero-panel {
+        padding: 48px 32px;
+    }
+
+    .login-hero-title {
+        font-size: 2rem;
+    }
+
+    .login-hero-features {
+        margin-bottom: 32px;
+    }
+
+    .login-hero-edition {
+        display: none;
+    }
+
+    .login-form-panel {
+        padding: 48px 32px;
+    }
+
+    .login-form-mobile-logo {
+        display: flex;
+    }
+}
+
+@media (max-width: 480px) {
+    .login-hero-panel {
+        padding: 32px 20px;
+    }
+
+    .login-form-panel {
+        padding: 32px 20px;
+    }
+}
