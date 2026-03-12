@@ -25,7 +25,22 @@ public class LocalAuthStateProvider : AuthenticationStateProvider
             if (string.IsNullOrEmpty(token))
                 return Unauthenticated();
 
-            var claims = ParseClaimsFromJwt(token);
+            var claims = ParseClaimsFromJwt(token).ToList();
+
+            // Check token expiry — an expired token should not authenticate the user.
+            // The "exp" JWT claim is a Unix timestamp (seconds since epoch).
+            var expClaim = claims.FirstOrDefault(c => c.Type == "exp");
+            if (expClaim is not null && long.TryParse(expClaim.Value, out var expUnix))
+            {
+                var expiry = DateTimeOffset.FromUnixTimeSeconds(expUnix);
+                if (expiry <= DateTimeOffset.UtcNow)
+                {
+                    // Token has expired — clear it so the login page is shown.
+                    await _js.InvokeVoidAsync("sessionStorage.removeItem", TokenKey);
+                    return Unauthenticated();
+                }
+            }
+
             var identity = new ClaimsIdentity(claims, "DevLocal");
             return new AuthenticationState(new ClaimsPrincipal(identity));
         }

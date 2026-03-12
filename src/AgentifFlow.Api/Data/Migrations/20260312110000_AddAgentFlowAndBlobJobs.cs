@@ -41,27 +41,50 @@ namespace AgentifFlow.Api.Data.Migrations
                 defaultValue: false);
 
             // ── BlobWatcherJobs table ─────────────────────────────────────────
-            migrationBuilder.CreateTable(
-                name: "BlobWatcherJobs",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    BlobName = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    ContainerName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    Status = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    RetryCount = table.Column<int>(type: "int", nullable: false),
-                    ErrorMessage = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true),
-                    LogDetails = table.Column<string>(nullable: true),
-                    RowsInserted = table.Column<int>(type: "int", nullable: true),
-                    DetectedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CompletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_BlobWatcherJobs", x => x.Id);
-                });
+            if (migrationBuilder.ActiveProvider == "Microsoft.EntityFrameworkCore.Sqlite")
+            {
+                // Use IF NOT EXISTS so the migration is idempotent for databases that were
+                // previously created with EnsureCreated before migrations were introduced.
+                migrationBuilder.Sql(@"
+                    CREATE TABLE IF NOT EXISTS ""BlobWatcherJobs"" (
+                        ""Id""            INTEGER NOT NULL CONSTRAINT ""PK_BlobWatcherJobs"" PRIMARY KEY AUTOINCREMENT,
+                        ""BlobName""      TEXT    NOT NULL,
+                        ""ContainerName"" TEXT    NULL,
+                        ""Status""        TEXT    NOT NULL,
+                        ""RetryCount""    INTEGER NOT NULL DEFAULT 0,
+                        ""ErrorMessage""  TEXT    NULL,
+                        ""LogDetails""    TEXT    NULL,
+                        ""RowsInserted""  INTEGER NULL,
+                        ""DetectedAt""   TEXT    NOT NULL,
+                        ""CompletedAt""  TEXT    NULL,
+                        ""UpdatedAt""    TEXT    NOT NULL
+                    );
+                ");
+            }
+            else
+            {
+                migrationBuilder.CreateTable(
+                    name: "BlobWatcherJobs",
+                    columns: table => new
+                    {
+                        Id = table.Column<int>(type: "int", nullable: false)
+                            .Annotation("SqlServer:Identity", "1, 1"),
+                        BlobName = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
+                        ContainerName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
+                        Status = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                        RetryCount = table.Column<int>(type: "int", nullable: false),
+                        ErrorMessage = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true),
+                        LogDetails = table.Column<string>(nullable: true),
+                        RowsInserted = table.Column<int>(type: "int", nullable: true),
+                        DetectedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                        CompletedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                        UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    },
+                    constraints: table =>
+                    {
+                        table.PrimaryKey("PK_BlobWatcherJobs", x => x.Id);
+                    });
+            }
         }
 
         /// <inheritdoc />
