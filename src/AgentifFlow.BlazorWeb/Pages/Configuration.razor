@@ -1,0 +1,261 @@
+@page "/"
+@page "/configuration"
+@attribute [Authorize]
+@inject IConfigurationApiService ConfigService
+@inject ISnackbar Snackbar
+
+<PageTitle>Integration Settings — AgentifFlow</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-1" Style="font-weight:700; letter-spacing:-0.5px;">
+    Integration Settings
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-6" Style="color:var(--mud-palette-text-secondary);">
+    Configure your Azure service connections. Secrets are stored securely and displayed as
+    <strong>••••••••</strong> once saved.
+</MudText>
+
+@if (_loading)
+{
+    <div class="d-flex justify-center mt-16">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Large" />
+    </div>
+}
+else if (_loadError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">@_loadError</MudAlert>
+}
+else
+{
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
+
+        <!-- ── Email / Graph API ────────────────────────────────────────────── -->
+        <MudTabPanel Text="Email / Graph API" Icon="@Icons.Material.Outlined.Email" Class="pa-6">
+            <MudGrid Spacing="3">
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_graphTenantId"
+                                  Label="Tenant ID"
+                                  Placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                                  HelperText="Azure AD directory (tenant) ID of your organisation."
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_graphClientId"
+                                  Label="Client ID"
+                                  Placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                                  HelperText="Application (client) ID of the registered Azure AD app."
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_graphClientSecret"
+                                  Label="Client Secret"
+                                  InputType="InputType.Password"
+                                  Placeholder="Leave blank to keep current secret"
+                                  HelperText="Client secret generated in the Azure AD app registration."
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_graphScopes"
+                                  Label="Graph Scopes"
+                                  Placeholder="Mail.Read Mail.Send Mail.ReadWrite"
+                                  HelperText="Space-separated Microsoft Graph permission scopes."
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <!-- ── Azure OpenAI ─────────────────────────────────────────────────── -->
+        <MudTabPanel Text="Azure OpenAI" Icon="@Icons.Material.Outlined.Psychology" Class="pa-6">
+            <MudGrid Spacing="3">
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_openAiEndpoint"
+                                  Label="Endpoint URL"
+                                  InputType="InputType.Url"
+                                  Placeholder="https://<resource>.openai.azure.com/"
+                                  HelperText="Full URL of your Azure OpenAI resource."
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_openAiApiKey"
+                                  Label="API Key"
+                                  InputType="InputType.Password"
+                                  Placeholder="Leave blank to keep current key"
+                                  HelperText="API key from the Azure OpenAI resource keys page."
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_openAiDeploymentName"
+                                  Label="Deployment Name"
+                                  Placeholder="gpt-4o"
+                                  HelperText="Name of your model deployment (e.g. gpt-4o, gpt-35-turbo)."
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <!-- ── Azure Blob Storage ────────────────────────────────────────────── -->
+        <MudTabPanel Text="Blob Storage" Icon="@Icons.Material.Outlined.Cloud" Class="pa-6">
+            <MudGrid Spacing="3">
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_blobConnStr"
+                                  Label="Connection String"
+                                  InputType="InputType.Password"
+                                  Placeholder="DefaultEndpointsProtocol=https;AccountName=…"
+                                  HelperText="Full connection string from the Storage account Access keys page."
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_blobContainer"
+                                  Label="Container Name"
+                                  Placeholder="agentifflow"
+                                  HelperText="Name of the default blob container to use."
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <!-- ── SQL Database ──────────────────────────────────────────────────── -->
+        <MudTabPanel Text="SQL Database" Icon="@Icons.Material.Outlined.Storage" Class="pa-6">
+            <MudGrid Spacing="3">
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_sqlConnStr"
+                                  Label="Connection String"
+                                  InputType="InputType.Password"
+                                  Placeholder="Server=…;Database=AgentifFlowDb;…"
+                                  HelperText="ADO.NET connection string for your Azure SQL or SQL Server instance."
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+    </MudTabs>
+
+    <!-- ── Footer / Save ─────────────────────────────────────────────────────── -->
+    <div class="d-flex justify-end align-center flex-wrap gap-4 mt-6">
+        @if (_savedAt is not null)
+        {
+            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-disabled);">
+                Last saved: @_savedAt
+            </MudText>
+        }
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Size="Size.Large"
+                   OnClick="HandleSave"
+                   Disabled="@_saving"
+                   StartIcon="@(_saved ? Icons.Material.Filled.Check : Icons.Material.Filled.Save)">
+            @if (_saving)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"
+                                     Color="Color.Inherit" />
+                <span class="ms-2">Saving…</span>
+            }
+            else if (_saved)
+            {
+                <span>Saved!</span>
+            }
+            else
+            {
+                <span>Save Configuration</span>
+            }
+        </MudButton>
+    </div>
+}
+
+@code {
+    // ── Graph / Email ────────────────────────────────────────────────────────
+    private string _graphTenantId = "";
+    private string _graphClientId = "";
+    private string _graphClientSecret = "";
+    private string _graphScopes = "Mail.Read Mail.Send Mail.ReadWrite";
+
+    // ── Azure OpenAI ─────────────────────────────────────────────────────────
+    private string _openAiEndpoint = "";
+    private string _openAiApiKey = "";
+    private string _openAiDeploymentName = "gpt-4o";
+
+    // ── Azure Blob Storage ────────────────────────────────────────────────────
+    private string _blobConnStr = "";
+    private string _blobContainer = "";
+
+    // ── SQL ──────────────────────────────────────────────────────────────────
+    private string _sqlConnStr = "";
+
+    // ── UI state ─────────────────────────────────────────────────────────────
+    private bool _loading = true;
+    private string? _loadError;
+    private bool _saving;
+    private bool _saved;
+    private string? _savedAt;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var config = await ConfigService.GetConfigurationAsync();
+            if (config is not null)
+            {
+                _graphTenantId        = config.GraphTenantId ?? "";
+                _graphClientId        = config.GraphClientId ?? "";
+                _graphClientSecret    = config.GraphClientSecret ?? "";
+                _graphScopes          = config.GraphScopes ?? "Mail.Read Mail.Send Mail.ReadWrite";
+                _openAiEndpoint       = config.OpenAiEndpoint ?? "";
+                _openAiApiKey         = config.OpenAiApiKey ?? "";
+                _openAiDeploymentName = config.OpenAiDeploymentName ?? "gpt-4o";
+                _blobConnStr          = config.BlobStorageConnectionString ?? "";
+                _blobContainer        = config.BlobContainerName ?? "";
+                _sqlConnStr           = config.SqlConnectionString ?? "";
+                if (config.UpdatedAt.HasValue)
+                    _savedAt = config.UpdatedAt.Value.ToLocalTime().ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task HandleSave()
+    {
+        _saving = true;
+        _saved = false;
+
+        var request = new UpdateAppConfigurationRequest
+        {
+            GraphTenantId        = _graphTenantId,
+            GraphClientId        = _graphClientId,
+            GraphScopes          = _graphScopes,
+            OpenAiEndpoint       = _openAiEndpoint,
+            OpenAiDeploymentName = _openAiDeploymentName,
+            BlobContainerName    = _blobContainer,
+        };
+
+        // Only send secrets when the user actually typed something new
+        if (!ConfigurationConstants.IsPlaceholder(_graphClientSecret)) request.GraphClientSecret = _graphClientSecret;
+        if (!ConfigurationConstants.IsPlaceholder(_openAiApiKey))      request.OpenAiApiKey = _openAiApiKey;
+        if (!ConfigurationConstants.IsPlaceholder(_blobConnStr))       request.BlobStorageConnectionString = _blobConnStr;
+        if (!ConfigurationConstants.IsPlaceholder(_sqlConnStr))        request.SqlConnectionString = _sqlConnStr;
+
+        try
+        {
+            var saved = await ConfigService.SaveConfigurationAsync(request);
+            if (saved?.UpdatedAt is not null)
+                _savedAt = saved.UpdatedAt.Value.ToLocalTime().ToString();
+            _saved = true;
+            Snackbar.Add("Configuration saved successfully!", Severity.Success);
+            await Task.Delay(3000);
+            _saved = false;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Save failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

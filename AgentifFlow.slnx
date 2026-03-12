@@ -1,7 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/AgentifFlow.Api/AgentifFlow.Api.csproj" />
-    <Project Path="src/AgentifFlow.Web/AgentifFlow.Web.esproj" />
+    <Project Path="src/AgentifFlow.BlazorWeb/AgentifFlow.BlazorWeb.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AgentifFlow.Tests/AgentifFlow.Tests.csproj" />

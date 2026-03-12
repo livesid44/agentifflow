@@ -1,0 +1,64 @@
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject NavigationManager Navigation
+
+<div style="min-height:100vh; background:linear-gradient(135deg,#e8f4fd 0%,#f0f4ff 100%);
+            display:flex; align-items:center; justify-content:center; padding:24px;">
+    <MudCard Elevation="4"
+             Style="max-width:440px; width:100%; border-radius:18px; text-align:center;">
+        <MudCardContent Class="pa-10">
+
+            <!-- Logo -->
+            <MudAvatar Color="Color.Primary" Style="width:72px;height:72px;margin:0 auto 20px;"
+                       Rounded="true">
+                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="font-size:2rem;" />
+            </MudAvatar>
+
+            <MudText Typo="Typo.h4" Class="mb-2" Style="font-weight:800;">AgentifFlow</MudText>
+            <MudText Typo="Typo.subtitle1" Class="mb-6"
+                     Style="color:var(--mud-palette-text-secondary);">
+                AI-powered workflow platform with Azure integration
+            </MudText>
+
+            <!-- Feature list -->
+            <MudStack Spacing="2" Class="mb-8 text-left">
+                @foreach (var (icon, label) in _features)
+                {
+                    <MudPaper Elevation="0" Class="pa-3 d-flex align-center rounded"
+                              Style="background:var(--mud-palette-background-grey); gap:12px;">
+                        <MudIcon Icon="@icon" Color="Color.Primary" />
+                        <MudText Typo="Typo.body2">@label</MudText>
+                    </MudPaper>
+                }
+            </MudStack>
+
+            <!-- Sign-in button -->
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       Size="Size.Large"
+                       OnClick="SignIn"
+                       StartIcon="@Icons.Material.Filled.Login"
+                       Style="height:52px; font-size:1rem; border-radius:10px;">
+                Sign in with Microsoft
+            </MudButton>
+
+            <MudText Typo="Typo.caption" Class="mt-4 d-block"
+                     Style="color:var(--mud-palette-text-disabled);">
+                Secured by Azure Active Directory OAuth&nbsp;2.0
+            </MudText>
+
+        </MudCardContent>
+    </MudCard>
+</div>
+
+@code {
+    private static readonly (string Icon, string Label)[] _features =
+    [
+        (Icons.Material.Outlined.Email,      "Microsoft 365 Mail via Graph API"),
+        (Icons.Material.Outlined.Psychology, "Azure OpenAI LLM integration"),
+        (Icons.Material.Outlined.Cloud,      "Azure Blob Storage"),
+        (Icons.Material.Outlined.Storage,    "SQL Database persistence"),
+    ];
+
+    private void SignIn() => Navigation.NavigateToLogin("authentication/login");
+}
