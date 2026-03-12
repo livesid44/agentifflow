@@ -35,4 +35,25 @@ public class AgentTask
 
     [MaxLength(5000)]
     public string? Result { get; set; }
+
+    // ── Email source tracking ─────────────────────────────────────────────────
+
+    /// <summary>Graph message ID of the email that originated this task.</summary>
+    [MaxLength(500)]
+    public string? SourceEmailId { get; set; }
+
+    /// <summary>Sender address of the originating email.</summary>
+    [MaxLength(300)]
+    public string? SourceEmailFrom { get; set; }
+
+    /// <summary>Subject line of the originating email.</summary>
+    [MaxLength(500)]
+    public string? SourceEmailSubject { get; set; }
+
+    /// <summary>
+    /// Graph conversation/thread ID so the agent can monitor replies
+    /// and associate follow-up messages with this task.
+    /// </summary>
+    [MaxLength(500)]
+    public string? ConversationId { get; set; }
 }

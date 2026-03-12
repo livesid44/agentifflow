@@ -29,4 +29,5 @@ public class EmailMessage
     public string BodyPreview { get; set; } = string.Empty;
     public DateTime ReceivedAt { get; set; }
     public bool IsRead { get; set; }
+    public string? ConversationId { get; set; }
 }

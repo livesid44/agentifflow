@@ -190,6 +190,16 @@ using (var scope = app.Services.CreateScope())
                 table: "AppConfigurations",
                 column: "GraphMailboxAddress",
                 definition: "TEXT NULL");
+
+            // AgentTask email-tracking columns (added in 20260312180000_AddAgentTaskEmailFields)
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AgentTasks", column: "SourceEmailId",      definition: "TEXT NULL");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AgentTasks", column: "SourceEmailFrom",    definition: "TEXT NULL");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AgentTasks", column: "SourceEmailSubject", definition: "TEXT NULL");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AgentTasks", column: "ConversationId",     definition: "TEXT NULL");
         }
     }
     catch (Exception ex)

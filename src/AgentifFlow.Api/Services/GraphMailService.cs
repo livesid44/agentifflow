@@ -47,7 +47,7 @@ public class GraphMailService : IGraphMailService
             var messages = await mailbox.MailFolders["inbox"].Messages.GetAsync(config =>
             {
                 config.QueryParameters.Top = top;
-                config.QueryParameters.Select = ["id", "subject", "from", "bodyPreview", "receivedDateTime", "isRead"];
+                config.QueryParameters.Select = ["id", "subject", "from", "bodyPreview", "receivedDateTime", "isRead", "conversationId"];
                 config.QueryParameters.Orderby = ["receivedDateTime DESC"];
             });
             return MapMessages(messages?.Value);
@@ -57,7 +57,7 @@ public class GraphMailService : IGraphMailService
             var messages = await _graphClient.Me.MailFolders["inbox"].Messages.GetAsync(config =>
             {
                 config.QueryParameters.Top = top;
-                config.QueryParameters.Select = ["id", "subject", "from", "bodyPreview", "receivedDateTime", "isRead"];
+                config.QueryParameters.Select = ["id", "subject", "from", "bodyPreview", "receivedDateTime", "isRead", "conversationId"];
                 config.QueryParameters.Orderby = ["receivedDateTime DESC"];
             });
             return MapMessages(messages?.Value);
@@ -154,6 +154,40 @@ public class GraphMailService : IGraphMailService
             await _graphClient.Me.Messages[messageId].DeleteAsync();
     }
 
+    public async Task MarkAsReadAsync(string messageId)
+    {
+        _logger.LogInformation("Marking email message {MessageId} as read", messageId);
+
+        var patch = new Microsoft.Graph.Models.Message { IsRead = true };
+        var mailbox = await GetMailboxBuilderAsync();
+
+        if (mailbox is not null)
+            await mailbox.Messages[messageId].PatchAsync(patch);
+        else
+            await _graphClient.Me.Messages[messageId].PatchAsync(patch);
+    }
+
+    public async Task ReplyToMessageAsync(string messageId, string replyBody)
+    {
+        _logger.LogInformation("Replying to email message {MessageId}", messageId);
+
+        var requestBody = new Microsoft.Graph.Users.Item.Messages.Item.Reply.ReplyPostRequestBody
+        {
+            Comment = replyBody
+        };
+
+        var mailbox = await GetMailboxBuilderAsync();
+
+        if (mailbox is not null)
+            await mailbox.Messages[messageId].Reply.PostAsync(requestBody);
+        else
+            await _graphClient.Me.Messages[messageId].Reply.PostAsync(
+                new Microsoft.Graph.Me.Messages.Item.Reply.ReplyPostRequestBody
+                {
+                    Comment = replyBody
+                });
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private static IEnumerable<EmailMessage> MapMessages(IEnumerable<Microsoft.Graph.Models.Message>? messages) =>
@@ -164,6 +198,7 @@ public class GraphMailService : IGraphMailService
             From = m.From?.EmailAddress?.Address ?? string.Empty,
             BodyPreview = m.BodyPreview ?? string.Empty,
             ReceivedAt = m.ReceivedDateTime?.UtcDateTime ?? DateTime.UtcNow,
-            IsRead = m.IsRead ?? false
+            IsRead = m.IsRead ?? false,
+            ConversationId = m.ConversationId
         }) ?? Enumerable.Empty<EmailMessage>();
 }
