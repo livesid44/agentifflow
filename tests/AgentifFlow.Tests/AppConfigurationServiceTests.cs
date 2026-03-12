@@ -133,4 +133,57 @@ public class AppConfigurationServiceTests
 
         Assert.Equal("https://v1.openai.azure.com/", result.OpenAiEndpoint);
     }
+
+    // ── GetOpenAiRawSettingsAsync ────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetOpenAiRawSettingsAsync_ReturnsNulls_WhenNoRowExists()
+    {
+        using var db = CreateDb(nameof(GetOpenAiRawSettingsAsync_ReturnsNulls_WhenNoRowExists));
+        var svc = new AppConfigurationService(db, NullLogger<AppConfigurationService>.Instance);
+
+        var (endpoint, apiKey, deployment) = await svc.GetOpenAiRawSettingsAsync();
+
+        Assert.Null(endpoint);
+        Assert.Null(apiKey);
+        Assert.Null(deployment);
+    }
+
+    [Fact]
+    public async Task GetOpenAiRawSettingsAsync_ReturnsUnmaskedValues_AfterSave()
+    {
+        using var db = CreateDb(nameof(GetOpenAiRawSettingsAsync_ReturnsUnmaskedValues_AfterSave));
+        var svc = new AppConfigurationService(db, NullLogger<AppConfigurationService>.Instance);
+
+        await svc.UpdateConfigurationAsync(new UpdateAppConfigurationRequest
+        {
+            OpenAiEndpoint       = "https://myresource.openai.azure.com/",
+            OpenAiApiKey         = "secret-key",
+            OpenAiDeploymentName = "gpt-4o"
+        }, "admin");
+
+        var (endpoint, apiKey, deployment) = await svc.GetOpenAiRawSettingsAsync();
+
+        // Raw values — must NOT be masked
+        Assert.Equal("https://myresource.openai.azure.com/", endpoint);
+        Assert.Equal("secret-key", apiKey);
+        Assert.Equal("gpt-4o", deployment);
+    }
+
+    [Fact]
+    public async Task GetOpenAiRawSettingsAsync_ReturnsLatestValues_AfterUpdate()
+    {
+        using var db = CreateDb(nameof(GetOpenAiRawSettingsAsync_ReturnsLatestValues_AfterUpdate));
+        var svc = new AppConfigurationService(db, NullLogger<AppConfigurationService>.Instance);
+
+        await svc.UpdateConfigurationAsync(
+            new UpdateAppConfigurationRequest { OpenAiApiKey = "old-key" }, "admin");
+
+        await svc.UpdateConfigurationAsync(
+            new UpdateAppConfigurationRequest { OpenAiApiKey = "new-key" }, "admin");
+
+        var (_, apiKey, _) = await svc.GetOpenAiRawSettingsAsync();
+
+        Assert.Equal("new-key", apiKey);
+    }
 }

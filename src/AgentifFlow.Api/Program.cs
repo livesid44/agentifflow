@@ -1,6 +1,5 @@
 using AgentifFlow.Api.Data;
 using AgentifFlow.Api.Services;
-using Azure.AI.OpenAI;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -68,20 +67,23 @@ if (devAuthEnabled)
 }
 
 // ── SQL Server / EF Core ─────────────────────────────────────────────────────
-builder.Services.AddDbContext<AgentifFlowDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+// Development uses SQLite (cross-platform, zero-install).
+// All other environments use SQL Server.
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? "Data Source=agentifflow-dev.db";
 
-// ── Azure OpenAI LLM client ─────────────────────────────────────────────────
-builder.Services.AddSingleton<AzureOpenAIClient>(_ =>
+builder.Services.AddDbContext<AgentifFlowDbContext>(options =>
 {
-    var endpoint = builder.Configuration["AzureOpenAI:Endpoint"]
-        ?? throw new InvalidOperationException("AzureOpenAI:Endpoint is not configured.");
-    var apiKey = builder.Configuration["AzureOpenAI:ApiKey"]
-        ?? throw new InvalidOperationException("AzureOpenAI:ApiKey is not configured.");
-    return new AzureOpenAIClient(new Uri(endpoint), new System.ClientModel.ApiKeyCredential(apiKey));
+    if (builder.Environment.IsDevelopment())
+        options.UseSqlite(connectionString);
+    else
+        options.UseSqlServer(connectionString);
 });
 
 // ── Application services ─────────────────────────────────────────────────────
+// Note: AzureOpenAIClient is NOT registered as a singleton here.
+// LlmService resolves OpenAI credentials on-demand from the database
+// (configured via the Integration Settings page in the UI).
 builder.Services.AddScoped<IGraphMailService, GraphMailService>();
 builder.Services.AddScoped<ILlmService, LlmService>();
 builder.Services.AddScoped<IAgentTaskService, AgentTaskService>();
@@ -159,8 +161,18 @@ var app = builder.Build();
 // ── Auto-migrate database on startup ────────────────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AgentifFlowDbContext>();
-    db.Database.EnsureCreated();
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AgentifFlowDbContext>();
+        db.Database.EnsureCreated();
+    }
+    catch (Exception ex)
+    {
+        var startupLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        startupLogger.LogWarning(ex,
+            "Database initialisation failed — the app will start but database-dependent " +
+            "features will be unavailable until the connection is configured.");
+    }
 }
 
 // ── HTTP pipeline ────────────────────────────────────────────────────────────

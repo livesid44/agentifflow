@@ -55,6 +55,12 @@ public class AppConfigurationService : IAppConfigurationService
         return ToDto(config);
     }
 
+    public async Task<(string? Endpoint, string? ApiKey, string? DeploymentName)> GetOpenAiRawSettingsAsync()
+    {
+        var config = await _db.AppConfigurations.FirstOrDefaultAsync();
+        return (config?.OpenAiEndpoint, config?.OpenAiApiKey, config?.OpenAiDeploymentName);
+    }
+
     private static AppConfigurationDto ToDto(AppConfiguration config) => new()
     {
         GraphTenantId = config.GraphTenantId,
