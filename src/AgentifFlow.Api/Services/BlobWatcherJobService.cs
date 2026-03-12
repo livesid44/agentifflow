@@ -108,18 +108,47 @@ public class BlobWatcherJobService : IBlobWatcherJobService
             j.Status != BlobWatcherJobStatus.Rejected);
     }
 
+    public async Task<BlobWatcherJob?> SetNotificationRefAsync(int id, string notificationRef)
+    {
+        var job = await _db.BlobWatcherJobs.FindAsync(id);
+        if (job is null) return null;
+
+        job.NotificationRef = notificationRef;
+        job.UpdatedAt       = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return job;
+    }
+
+    public async Task<BlobWatcherJob?> SetUserReplyAsync(int id, string fromAddress, string replyPreview)
+    {
+        var job = await _db.BlobWatcherJobs.FindAsync(id);
+        if (job is null) return null;
+
+        job.UserReply = $"From: {fromAddress}\n{replyPreview}";
+        job.Status    = BlobWatcherJobStatus.ReplyReceived;
+        job.UpdatedAt = DateTime.UtcNow;
+        job.LogDetails = string.IsNullOrEmpty(job.LogDetails)
+            ? $"[{DateTime.UtcNow:u}] Reply received from {fromAddress}: {replyPreview[..Math.Min(200, replyPreview.Length)]}"
+            : $"{job.LogDetails}\n[{DateTime.UtcNow:u}] Reply received from {fromAddress}: {replyPreview[..Math.Min(200, replyPreview.Length)]}";
+
+        await _db.SaveChangesAsync();
+        return job;
+    }
+
     private static BlobWatcherJobDto ToDto(BlobWatcherJob j) => new()
     {
-        Id            = j.Id,
-        BlobName      = j.BlobName,
-        ContainerName = j.ContainerName,
-        Status        = j.Status.ToString(),
-        RetryCount    = j.RetryCount,
-        ErrorMessage  = j.ErrorMessage,
-        LogDetails    = j.LogDetails,
-        RowsInserted  = j.RowsInserted,
-        DetectedAt    = j.DetectedAt,
-        CompletedAt   = j.CompletedAt,
-        UpdatedAt     = j.UpdatedAt
+        Id              = j.Id,
+        BlobName        = j.BlobName,
+        ContainerName   = j.ContainerName,
+        Status          = j.Status.ToString(),
+        RetryCount      = j.RetryCount,
+        ErrorMessage    = j.ErrorMessage,
+        LogDetails      = j.LogDetails,
+        RowsInserted    = j.RowsInserted,
+        DetectedAt      = j.DetectedAt,
+        CompletedAt     = j.CompletedAt,
+        UpdatedAt       = j.UpdatedAt,
+        NotificationRef = j.NotificationRef,
+        UserReply       = j.UserReply
     };
 }

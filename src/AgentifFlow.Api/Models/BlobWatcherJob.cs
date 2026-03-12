@@ -12,7 +12,9 @@ public enum BlobWatcherJobStatus
     Completed,
     Rejected,
     Retrying,
-    Failed
+    Failed,
+    /// <summary>Reply received from the recipient of a notification email.</summary>
+    ReplyReceived
 }
 
 /// <summary>Tracks a single CSV file detected in blob storage through its full processing lifecycle.</summary>
@@ -43,6 +45,22 @@ public class BlobWatcherJob
     public DateTime DetectedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    // ── Notification email tracking ───────────────────────────────────────────
+
+    /// <summary>
+    /// Unique reference token embedded in every outbound notification subject line,
+    /// e.g. "AGNT-a3b2c4d5".  Used to correlate inbox replies back to this job.
+    /// </summary>
+    [MaxLength(20)]
+    public string? NotificationRef { get; set; }
+
+    /// <summary>
+    /// Preview of the first reply received from the notification recipient.
+    /// Populated by the inbox reply-polling loop.
+    /// </summary>
+    [MaxLength(2000)]
+    public string? UserReply { get; set; }
 }
 
 /// <summary>DTO for returning BlobWatcherJob info to clients.</summary>
@@ -59,4 +77,6 @@ public class BlobWatcherJobDto
     public DateTime DetectedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public string? NotificationRef { get; set; }
+    public string? UserReply { get; set; }
 }

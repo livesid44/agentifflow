@@ -13,4 +13,8 @@ public class BlobWatcherJobDto
     public DateTime DetectedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    /// <summary>Unique reference token embedded in the notification email subject.</summary>
+    public string? NotificationRef { get; set; }
+    /// <summary>Preview of the first reply received from the notification recipient.</summary>
+    public string? UserReply { get; set; }
 }

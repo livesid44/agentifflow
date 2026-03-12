@@ -7,27 +7,19 @@ using Microsoft.EntityFrameworkCore;
 namespace AgentifFlow.Api.Services;
 
 /// <summary>
-/// Background worker that, when Agent Flow is enabled, polls Azure Blob Storage at a
-/// configurable interval, detects new CSV files, validates them, and inserts valid data
-/// into SQL.
-///
-/// <para>
-/// <b>Email notifications</b> are sent to the configured <c>NotificationEmail</c> in two cases:
-/// <list type="bullet">
-///   <item>No CSV files are found in the container (once per agent run-session, reset when a file is processed).</item>
-///   <item>A CSV file fails column/data validation.</item>
+/// Background worker that, when Agent Flow is enabled:
+/// <list type="number">
+///   <item>Polls Azure Blob Storage for new CSV files, validates them, and inserts into SQL.</item>
+///   <item>Sends a notification email with a unique <c>[Ref: AGNT-…]</c> token in the subject
+///         whenever a file is missing or fails validation.</item>
+///   <item>Each poll cycle scans the inbox for unread replies whose subject contains one of
+///         those tokens and records the reply against the originating job.</item>
 /// </list>
-/// </para>
 /// </summary>
 public class BlobWatcherBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BlobWatcherBackgroundService> _logger;
-
-    // Track whether the "no files found" notification has already been sent this run-session
-    // so we do not flood the mailbox on every poll cycle.  Resets when a file is successfully
-    // detected, giving the operator a fresh alert after the container is drained and refilled.
-    private bool _noFileNotificationSent;
 
     public BlobWatcherBackgroundService(
         IServiceScopeFactory scopeFactory,
@@ -43,26 +35,23 @@ public class BlobWatcherBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            int pollInterval = 60; // default
+            int pollInterval = 60;
 
             try
             {
                 using var scope = _scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<AgentifFlowDbContext>();
-
+                var db     = scope.ServiceProvider.GetRequiredService<AgentifFlowDbContext>();
                 var config = await db.AppConfigurations.FirstOrDefaultAsync(stoppingToken);
 
                 if (config is null || !config.AgentFlowEnabled)
                 {
-                    // Agent flow not yet configured or disabled — wait briefly and re-check
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
 
-                pollInterval = config.BlobPollIntervalSeconds > 0
-                    ? config.BlobPollIntervalSeconds
-                    : 60;
+                pollInterval = config.BlobPollIntervalSeconds > 0 ? config.BlobPollIntervalSeconds : 60;
 
+                // ── 1. Blob scan ──────────────────────────────────────────────
                 if (!string.IsNullOrWhiteSpace(config.BlobStorageConnectionString) &&
                     !string.IsNullOrWhiteSpace(config.BlobContainerName))
                 {
@@ -70,23 +59,13 @@ public class BlobWatcherBackgroundService : BackgroundService
                 }
                 else
                 {
-                    _logger.LogWarning("Blob storage not fully configured — skipping poll cycle.");
-
-                    // Notify operator that blob storage is not configured
-                    if (!string.IsNullOrWhiteSpace(config.NotificationEmail) &&
-                        !_noFileNotificationSent)
-                    {
-                        await TrySendEmailAsync(
-                            scope.ServiceProvider.GetRequiredService<IGraphMailService>(),
-                            config.NotificationEmail,
-                            "[AgentifFlow] Blob Storage Not Configured",
-                            "The AgentifFlow agent is enabled but Blob Storage has not been configured.\n\n" +
-                            "Please go to Integration Settings and enter a valid Storage Account " +
-                            "Connection String and Container Name, then save the configuration.",
-                            "Blob storage not configured notification");
-                        _noFileNotificationSent = true;
-                    }
+                    _logger.LogWarning("Blob storage not fully configured — skipping blob poll.");
+                    await SendBlobNotConfiguredNotificationAsync(
+                        scope.ServiceProvider, config, db, stoppingToken);
                 }
+
+                // ── 2. Inbox reply scan ───────────────────────────────────────
+                await PollInboxForRepliesAsync(scope.ServiceProvider, db, stoppingToken);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
@@ -99,6 +78,10 @@ public class BlobWatcherBackgroundService : BackgroundService
 
         _logger.LogInformation("BlobWatcherBackgroundService stopped.");
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Blob storage polling
+    // ──────────────────────────────────────────────────────────────────────────
 
     private async Task PollBlobStorageAsync(
         IServiceProvider services,
@@ -115,7 +98,6 @@ public class BlobWatcherBackgroundService : BackgroundService
         var llmService           = services.GetRequiredService<ILlmService>();
         var mailService          = services.GetRequiredService<IGraphMailService>();
 
-        // ── 1. Detect and process new blobs ──────────────────────────────────
         int csvFilesDetected = 0;
 
         await foreach (BlobItem blob in containerClient.GetBlobsAsync(cancellationToken: ct))
@@ -125,24 +107,16 @@ public class BlobWatcherBackgroundService : BackgroundService
 
             csvFilesDetected++;
 
-            // Skip already-tracked blobs that are not pending a retry
             bool alreadyExists = await jobService.ExistsAsync(blob.Name, config.BlobContainerName);
             if (alreadyExists) continue;
 
             _logger.LogInformation("New CSV blob detected: {BlobName}", blob.Name);
-
-            // A new file has been found — reset the "no file" notification flag so the
-            // operator gets a fresh alert if the container becomes empty again later.
-            _noFileNotificationSent = false;
-
             var job = await jobService.CreateAsync(blob.Name, config.BlobContainerName);
-
-            await ProcessBlobAsync(
-                job, blob.Name, containerClient, config,
+            await ProcessBlobAsync(job, blob.Name, containerClient, config,
                 jobService, csvValidationService, llmService, mailService, ct);
         }
 
-        // ── 2. Re-process blobs that were approved for retry ─────────────────
+        // Re-process blobs approved for retry
         var retryJobs = await db.BlobWatcherJobs
             .Where(j => j.Status == BlobWatcherJobStatus.Retrying)
             .ToListAsync(ct);
@@ -152,43 +126,184 @@ public class BlobWatcherBackgroundService : BackgroundService
             _logger.LogInformation("Re-processing retry job {JobId} for blob '{Blob}'",
                 retryJob.Id, retryJob.BlobName);
 
-            _noFileNotificationSent = false; // treat a retry as "active work"
-
             var retryContainer = string.IsNullOrWhiteSpace(retryJob.ContainerName)
                 ? containerClient
                 : blobServiceClient.GetBlobContainerClient(retryJob.ContainerName);
 
-            await ProcessBlobAsync(
-                retryJob, retryJob.BlobName, retryContainer, config,
+            await ProcessBlobAsync(retryJob, retryJob.BlobName, retryContainer, config,
                 jobService, csvValidationService, llmService, mailService, ct);
         }
 
-        // ── 3. No-file notification ───────────────────────────────────────────
-        // Send ONE notification if no CSV files were found in the container and
-        // retryJobs is also empty, so the operator knows to upload a file.
-        if (csvFilesDetected == 0 && retryJobs.Count == 0 &&
-            !_noFileNotificationSent &&
-            !string.IsNullOrWhiteSpace(config.NotificationEmail))
+        // Send a "no CSV files found" alert if nothing was detected this cycle
+        if (csvFilesDetected == 0 && retryJobs.Count == 0)
+            await SendNoFileNotificationAsync(services, config, db, ct);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // "No file found" notification  —  creates a tracked job so the ref
+    // persists across service restarts and can be matched with email replies
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private const string NoFileBlobName            = "[container-scan]";
+    private const string BlobNotConfiguredBlobName = "[blob-not-configured]";
+
+    private async Task SendNoFileNotificationAsync(
+        IServiceProvider services,
+        AppConfiguration config,
+        AgentifFlowDbContext db,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(config.NotificationEmail)) return;
+
+        // Only send ONE notification per empty-container event (idempotent)
+        bool alreadySent = await db.BlobWatcherJobs.AnyAsync(j =>
+            j.BlobName      == NoFileBlobName &&
+            j.ContainerName == config.BlobContainerName &&
+            (j.Status == BlobWatcherJobStatus.AwaitingApproval ||
+             j.Status == BlobWatcherJobStatus.ReplyReceived), ct);
+
+        if (alreadySent) return;
+
+        var jobService  = services.GetRequiredService<IBlobWatcherJobService>();
+        var mailService = services.GetRequiredService<IGraphMailService>();
+
+        var job             = await jobService.CreateAsync(NoFileBlobName, config.BlobContainerName);
+        var notificationRef = GenerateRef();
+
+        _logger.LogInformation(
+            "No CSV files in container '{Container}' — sending notification [{Ref}].",
+            config.BlobContainerName, notificationRef);
+
+        var subject = $"[AgentifFlow] No CSV Files Found in '{config.BlobContainerName}' [Ref: {notificationRef}]";
+        var body    =
+            $"The AgentifFlow agent polled the blob container \"{config.BlobContainerName}\" " +
+            $"but did not find any CSV files to process.\n\n" +
+            "Please upload a CSV file to the container, or verify the container name and " +
+            "Storage Account Connection String in the Integration Settings.\n\n" +
+            $"The agent will continue polling every {config.BlobPollIntervalSeconds} seconds " +
+            "and will process any file as soon as it appears.\n\n" +
+            "Reply to this email on this thread when the file is ready — " +
+            "the agent monitors this reference and will update the job record automatically.\n\n" +
+            $"Reference: {notificationRef}";
+
+        bool sent = await TrySendEmailAsync(mailService, config.NotificationEmail,
+            subject, body, $"no-file [{notificationRef}]");
+
+        await jobService.SetNotificationRefAsync(job.Id, notificationRef);
+        await jobService.UpdateStatusAsync(job.Id,
+            sent ? BlobWatcherJobStatus.AwaitingApproval : BlobWatcherJobStatus.Failed,
+            logEntry: sent
+                ? $"No-file notification sent to {config.NotificationEmail} [Ref: {notificationRef}]."
+                : "No-file notification could not be sent — Graph API may not be configured.");
+    }
+
+    private async Task SendBlobNotConfiguredNotificationAsync(
+        IServiceProvider services,
+        AppConfiguration config,
+        AgentifFlowDbContext db,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(config.NotificationEmail)) return;
+
+        bool alreadySent = await db.BlobWatcherJobs.AnyAsync(j =>
+            j.BlobName == BlobNotConfiguredBlobName &&
+            (j.Status == BlobWatcherJobStatus.AwaitingApproval ||
+             j.Status == BlobWatcherJobStatus.ReplyReceived), ct);
+
+        if (alreadySent) return;
+
+        var jobService  = services.GetRequiredService<IBlobWatcherJobService>();
+        var mailService = services.GetRequiredService<IGraphMailService>();
+
+        var job             = await jobService.CreateAsync(BlobNotConfiguredBlobName, null);
+        var notificationRef = GenerateRef();
+
+        var subject = $"[AgentifFlow] Blob Storage Not Configured [Ref: {notificationRef}]";
+        var body    =
+            "The AgentifFlow agent is enabled but Blob Storage has not been fully configured.\n\n" +
+            "Please go to Integration Settings and enter a valid Storage Account Connection String " +
+            "and Container Name, then save the configuration.\n\n" +
+            "Reply to this email once the settings have been updated.\n\n" +
+            $"Reference: {notificationRef}";
+
+        bool sent = await TrySendEmailAsync(mailService, config.NotificationEmail,
+            subject, body, $"blob-not-configured [{notificationRef}]");
+
+        await jobService.SetNotificationRefAsync(job.Id, notificationRef);
+        await jobService.UpdateStatusAsync(job.Id,
+            sent ? BlobWatcherJobStatus.AwaitingApproval : BlobWatcherJobStatus.Failed,
+            logEntry: sent
+                ? $"Blob-not-configured notification sent [Ref: {notificationRef}]."
+                : "Notification could not be sent — Graph API may not be configured.");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Inbox reply polling
+    // Each poll cycle: fetch recent unread messages, match subject against known
+    // notification refs, record reply, and mark the message as read.
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private async Task PollInboxForRepliesAsync(
+        IServiceProvider services,
+        AgentifFlowDbContext db,
+        CancellationToken ct)
+    {
+        // Only proceed when there are jobs actively waiting for a reply
+        var waitingJobs = await db.BlobWatcherJobs
+            .Where(j => j.NotificationRef != null &&
+                        (j.Status == BlobWatcherJobStatus.AwaitingApproval ||
+                         j.Status == BlobWatcherJobStatus.ValidationFailed))
+            .ToListAsync(ct);
+
+        if (waitingJobs.Count == 0) return;
+
+        var mailService = services.GetRequiredService<IGraphMailService>();
+        var jobService  = services.GetRequiredService<IBlobWatcherJobService>();
+
+        List<EmailMessage> inboxMessages;
+        try
         {
+            // Fetch the 50 most-recent messages; filter to unread only (read messages were
+            // already processed in a previous cycle)
+            inboxMessages = (await mailService.GetInboxMessagesAsync(top: 50))
+                .Where(m => !m.IsRead)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not fetch inbox for reply polling (Graph API may be unavailable).");
+            return;
+        }
+
+        if (inboxMessages.Count == 0) return;
+
+        foreach (var job in waitingJobs)
+        {
+            // Replies from any mail client will include the original subject (with "Re:" prefix
+            // and our "[Ref: AGNT-…]" token still present)
+            var reply = inboxMessages.FirstOrDefault(m =>
+                m.Subject.Contains(job.NotificationRef!, StringComparison.OrdinalIgnoreCase));
+
+            if (reply is null) continue;
+
             _logger.LogInformation(
-                "No CSV files found in container '{Container}' — sending notification email.",
-                config.BlobContainerName);
+                "Reply received for job {JobId} [Ref: {Ref}] from '{From}'",
+                job.Id, job.NotificationRef, reply.From);
 
-            await TrySendEmailAsync(
-                mailService,
-                config.NotificationEmail,
-                $"[AgentifFlow] No CSV Files Found in Container '{config.BlobContainerName}'",
-                $"The AgentifFlow agent polled the blob container \"{config.BlobContainerName}\" " +
-                $"but did not find any CSV files to process.\n\n" +
-                $"Please upload a CSV file to the container, or verify that the container name " +
-                $"and Storage Account Connection String are correct in the Integration Settings.\n\n" +
-                $"The agent will continue polling every {config.BlobPollIntervalSeconds} seconds " +
-                $"and will process files as soon as they appear.",
-                $"No-file notification for container '{config.BlobContainerName}'");
+            await jobService.SetUserReplyAsync(job.Id, reply.From, reply.BodyPreview);
 
-            _noFileNotificationSent = true;
+            // Mark the inbox copy as read so the next cycle does not process it again
+            try   { await mailService.MarkAsReadAsync(reply.Id); }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not mark reply message {MsgId} as read.", reply.Id);
+            }
         }
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // CSV processing pipeline
+    // ──────────────────────────────────────────────────────────────────────────
 
     private async Task ProcessBlobAsync(
         BlobWatcherJob job,
@@ -201,13 +316,12 @@ public class BlobWatcherBackgroundService : BackgroundService
         IGraphMailService mailService,
         CancellationToken ct)
     {
-        // ── 1. Download CSV content ───────────────────────────────────────────
+        // ── 1. Download ───────────────────────────────────────────────────────
         string csvContent;
         try
         {
-            var blobClient = container.GetBlobClient(blobName);
-            var download   = await blobClient.DownloadContentAsync(ct);
-            csvContent     = download.Value.Content.ToString();
+            var download = await container.GetBlobClient(blobName).DownloadContentAsync(ct);
+            csvContent   = download.Value.Content.ToString();
         }
         catch (Exception ex)
         {
@@ -215,20 +329,20 @@ public class BlobWatcherBackgroundService : BackgroundService
             await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
                 $"Download failed: {ex.Message}", "Blob download error.");
 
-            await TrySendEmailAsync(
-                mailService,
-                config.NotificationEmail,
-                $"[AgentifFlow] Failed to Download File: {blobName}",
-                $"The AgentifFlow agent could not download the file \"{blobName}\" " +
+            var dlRef = GenerateRef();
+            await jobService.SetNotificationRefAsync(job.Id, dlRef);
+            await TrySendEmailAsync(mailService, config.NotificationEmail,
+                $"[AgentifFlow] Failed to Download File: {blobName} [Ref: {dlRef}]",
+                $"The AgentifFlow agent could not download \"{blobName}\" " +
                 $"from container \"{config.BlobContainerName}\".\n\n" +
                 $"Error: {ex.Message}\n\n" +
-                "Please verify the file exists, the connection string is correct, and that the " +
-                "storage account is accessible.",
-                $"Download failure notification for '{blobName}'");
+                "Please verify the file exists and the storage account is accessible.\n\n" +
+                $"Reply to this email on this thread once the issue is resolved.\n\nReference: {dlRef}",
+                $"download-failure [{dlRef}]");
             return;
         }
 
-        // ── 2. Validate CSV ───────────────────────────────────────────────────
+        // ── 2. Validate ───────────────────────────────────────────────────────
         await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Validating,
             logEntry: "Starting CSV validation.");
 
@@ -242,43 +356,46 @@ public class BlobWatcherBackgroundService : BackgroundService
             await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.ValidationFailed,
                 errorSummary, $"Validation failed: {errorSummary}");
 
-            // ── 3a. Draft a clear error email using LLM if available ──────────
+            // Draft human-readable error email (LLM when available; plain text fallback)
             string emailBody;
             try
             {
                 emailBody = await llmService.SummarizeAsync(
                     $"CSV file '{blobName}' failed validation. Errors: {errorSummary}. " +
                     $"Row count attempted: {validationResult.RowCount}. " +
-                    $"Please draft a professional email asking the user to review and fix the file.");
+                    "Please draft a professional email asking the user to review and fix the file.");
             }
             catch
             {
                 emailBody =
-                    $"The CSV file \"{blobName}\" failed validation and could not be uploaded to the database.\n\n" +
-                    $"Validation errors found:\n{string.Join('\n', validationResult.Errors.Select(e => "  • " + e))}\n\n" +
-                    $"Please correct the file and re-upload it to the blob container \"{config.BlobContainerName}\".";
+                    $"The CSV file \"{blobName}\" failed validation and could not be uploaded " +
+                    $"to the database.\n\n" +
+                    $"Validation errors:\n" +
+                    string.Join('\n', validationResult.Errors.Select(e => "  \u2022 " + e));
             }
 
-            // ── 3b. Send notification email ───────────────────────────────────
-            var sent = await TrySendEmailAsync(
-                mailService,
-                config.NotificationEmail,
-                $"[AgentifFlow] CSV Validation Failed: {blobName}",
+            var valRef = GenerateRef();
+            emailBody +=
+                $"\n\nPlease correct the file and re-upload it to container \"{config.BlobContainerName}\".\n\n" +
+                "Reply to this email on this thread once the corrected file has been uploaded — " +
+                "the agent monitors this reference and will automatically re-process the file.\n\n" +
+                $"Reference: {valRef}";
+
+            bool sent = await TrySendEmailAsync(mailService, config.NotificationEmail,
+                $"[AgentifFlow] CSV Validation Failed: {blobName} [Ref: {valRef}]",
                 emailBody,
-                $"Validation-failure notification for '{blobName}'");
+                $"validation-failure [{valRef}]");
 
-            var nextStatus = sent
-                ? BlobWatcherJobStatus.AwaitingApproval
-                : BlobWatcherJobStatus.ValidationFailed;
-
-            await jobService.UpdateStatusAsync(job.Id, nextStatus,
+            await jobService.SetNotificationRefAsync(job.Id, valRef);
+            await jobService.UpdateStatusAsync(job.Id,
+                sent ? BlobWatcherJobStatus.AwaitingApproval : BlobWatcherJobStatus.ValidationFailed,
                 logEntry: sent
-                    ? $"Notification email sent to {config.NotificationEmail}."
-                    : "Notification email skipped (NotificationEmail not configured).");
+                    ? $"Notification sent to {config.NotificationEmail} [Ref: {valRef}]. Awaiting reply."
+                    : "Notification skipped (NotificationEmail not configured).");
             return;
         }
 
-        // ── 4. Validation passed — insert into SQL ────────────────────────────
+        // ── 3. Insert into SQL ────────────────────────────────────────────────
         await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Inserting,
             logEntry: $"Validation passed ({validationResult.RowCount} rows). Starting SQL insert.");
 
@@ -288,32 +405,43 @@ public class BlobWatcherBackgroundService : BackgroundService
             await jobService.SetRowsInsertedAsync(job.Id, rowsInserted);
             await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Completed,
                 logEntry: $"Successfully inserted {rowsInserted} rows into SQL.");
-            _logger.LogInformation("Completed processing {BlobName}: {Rows} rows inserted.", blobName, rowsInserted);
+            _logger.LogInformation("Completed {BlobName}: {Rows} rows inserted.", blobName, rowsInserted);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "SQL insert failed for {BlobName}", blobName);
             await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
-                $"SQL insert failed: {ex.Message}",
-                $"SQL insert error: {ex.Message}");
+                $"SQL insert failed: {ex.Message}", $"SQL insert error: {ex.Message}");
 
-            await TrySendEmailAsync(
-                mailService,
-                config.NotificationEmail,
-                $"[AgentifFlow] SQL Insert Failed: {blobName}",
-                $"The CSV file \"{blobName}\" passed validation but could not be inserted into the database.\n\n" +
-                $"Error: {ex.Message}\n\n" +
-                "Please check the SQL connection string and ensure the database is reachable.",
-                $"SQL-insert failure notification for '{blobName}'");
+            var sqlRef = GenerateRef();
+            await jobService.SetNotificationRefAsync(job.Id, sqlRef);
+            await TrySendEmailAsync(mailService, config.NotificationEmail,
+                $"[AgentifFlow] SQL Insert Failed: {blobName} [Ref: {sqlRef}]",
+                $"The CSV file \"{blobName}\" passed validation but could not be inserted into " +
+                $"the database.\n\nError: {ex.Message}\n\n" +
+                "Please check the SQL connection string and ensure the database is reachable.\n\n" +
+                $"Reply to this email on this thread once the issue is resolved.\n\nReference: {sqlRef}",
+                $"sql-failure [{sqlRef}]");
 
             if (job.RetryCount < config.MaxRetryCount)
                 await jobService.IncrementRetryAsync(job.Id);
         }
     }
 
+    // ──────────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ──────────────────────────────────────────────────────────────────────────
+
     /// <summary>
-    /// Sends a notification email, swallowing any exception so a mail failure never
-    /// crashes the processing pipeline.  Returns <c>true</c> on success.
+    /// Generates a short, globally-unique reference token that is embedded in every
+    /// outbound notification subject line (e.g. "AGNT-A3B2C4D5").
+    /// </summary>
+    private static string GenerateRef() =>
+        "AGNT-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+
+    /// <summary>
+    /// Attempts to send a notification email, swallowing any exception so that a mail
+    /// delivery failure never crashes the processing pipeline.
     /// </summary>
     private async Task<bool> TrySendEmailAsync(
         IGraphMailService mailService,
@@ -324,7 +452,7 @@ public class BlobWatcherBackgroundService : BackgroundService
     {
         if (string.IsNullOrWhiteSpace(to))
         {
-            _logger.LogDebug("Skipping email '{Subject}' — NotificationEmail is not configured.", subject);
+            _logger.LogDebug("Skipping '{Subject}' — NotificationEmail is not configured.", subject);
             return false;
         }
 
@@ -332,10 +460,7 @@ public class BlobWatcherBackgroundService : BackgroundService
         {
             await mailService.SendEmailAsync(new SendEmailRequest
             {
-                To      = to,
-                Subject = subject,
-                Body    = body,
-                IsHtml  = false
+                To = to, Subject = subject, Body = body, IsHtml = false
             });
             _logger.LogInformation("Email sent ({Context}) to {To}", logContext, to);
             return true;
@@ -347,11 +472,10 @@ public class BlobWatcherBackgroundService : BackgroundService
         }
     }
 
-    /// <summary>
-    /// Inserts the CSV rows into SQL using a bulk insert pattern.
-    /// The table name is derived from the blob filename (without extension).
-    /// Creates the table if it does not exist.
-    /// </summary>
+    // ──────────────────────────────────────────────────────────────────────────
+    // SQL bulk-insert
+    // ──────────────────────────────────────────────────────────────────────────
+
     private static async Task<int> InsertCsvToSqlAsync(
         string csvContent, string blobName, AppConfiguration config)
     {
@@ -366,18 +490,17 @@ public class BlobWatcherBackgroundService : BackgroundService
 
         if (lines.Length < 2) return 0;
 
-        var headers = SplitCsvLine(lines[0]);
-        // Sanitise table name from blob filename
+        var headers   = SplitCsvLine(lines[0]);
         var tableName = System.Text.RegularExpressions.Regex
             .Replace(System.IO.Path.GetFileNameWithoutExtension(blobName), @"[^A-Za-z0-9_]", "_");
 
         using var connection = new Microsoft.Data.SqlClient.SqlConnection(config.SqlConnectionString);
         await connection.OpenAsync();
 
-        // Create table if not exists
         var createCols = string.Join(", ", headers.Select(h => $"[{h}] NVARCHAR(MAX)"));
-        var createSql  = $"IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='{tableName}' AND xtype='U') " +
-                         $"CREATE TABLE [{tableName}] ({createCols})";
+        var createSql  =
+            $"IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='{tableName}' AND xtype='U') " +
+            $"CREATE TABLE [{tableName}] ({createCols})";
         using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(createSql, connection))
             await cmd.ExecuteNonQueryAsync();
 
@@ -391,10 +514,7 @@ public class BlobWatcherBackgroundService : BackgroundService
 
             using var cmd = new Microsoft.Data.SqlClient.SqlCommand(insertSql, connection);
             for (int j = 0; j < headers.Length; j++)
-            {
-                var val = j < cols.Length ? (object)cols[j] : DBNull.Value;
-                cmd.Parameters.AddWithValue($"@p{j}", val);
-            }
+                cmd.Parameters.AddWithValue($"@p{j}", j < cols.Length ? (object)cols[j] : DBNull.Value);
             await cmd.ExecuteNonQueryAsync();
             inserted++;
         }
@@ -410,9 +530,9 @@ public class BlobWatcherBackgroundService : BackgroundService
 
         foreach (char c in line)
         {
-            if (c == '"')        { inQuotes = !inQuotes; }
+            if (c == '"')                   { inQuotes = !inQuotes; }
             else if (c == ',' && !inQuotes) { fields.Add(current.ToString().Trim()); current.Clear(); }
-            else                 { current.Append(c); }
+            else                            { current.Append(c); }
         }
         fields.Add(current.ToString().Trim());
         return [.. fields];

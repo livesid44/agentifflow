@@ -11,4 +11,8 @@ public interface IBlobWatcherJobService
     Task<BlobWatcherJob?> IncrementRetryAsync(int id);
     Task<BlobWatcherJob?> SetRowsInsertedAsync(int id, int rows);
     Task<bool> ExistsAsync(string blobName, string? containerName);
+    /// <summary>Stores the notification reference token generated when sending an alert email.</summary>
+    Task<BlobWatcherJob?> SetNotificationRefAsync(int id, string notificationRef);
+    /// <summary>Records the first reply received from the notification recipient.</summary>
+    Task<BlobWatcherJob?> SetUserReplyAsync(int id, string fromAddress, string replyPreview);
 }

@@ -200,6 +200,12 @@ using (var scope = app.Services.CreateScope())
                 table: "AgentTasks", column: "SourceEmailSubject", definition: "TEXT NULL");
             await EnsureSqliteColumnAsync(db, startupLogger,
                 table: "AgentTasks", column: "ConversationId",     definition: "TEXT NULL");
+
+            // BlobWatcherJob notification-ref columns (added in 20260312190000_AddBlobJobNotificationRef)
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "BlobWatcherJobs", column: "NotificationRef", definition: "TEXT NULL");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "BlobWatcherJobs", column: "UserReply",       definition: "TEXT NULL");
         }
     }
     catch (Exception ex)

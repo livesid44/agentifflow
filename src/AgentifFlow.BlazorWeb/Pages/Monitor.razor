@@ -90,6 +90,7 @@ else
             <MudTh>Blob Name</MudTh>
             <MudTh>Container</MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<BlobWatcherJobDto, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
+            <MudTh>Ref</MudTh>
             <MudTh>Retries</MudTh>
             <MudTh>Rows Inserted</MudTh>
             <MudTh>Actions</MudTh>
@@ -101,6 +102,20 @@ else
             </MudTd>
             <MudTd DataLabel="Container">@(context.ContainerName ?? "—")</MudTd>
             <MudTd DataLabel="Status">@StatusChip(context.Status)</MudTd>
+            <MudTd DataLabel="Ref">
+                @if (!string.IsNullOrEmpty(context.NotificationRef))
+                {
+                    <MudTooltip Text="@(string.IsNullOrEmpty(context.UserReply) ? "Awaiting reply on this reference thread" : "Reply received — click Info to read it")">
+                        <MudChip T="string" Text="@context.NotificationRef" Size="Size.Small"
+                                 Icon="@(string.IsNullOrEmpty(context.UserReply) ? Icons.Material.Filled.MarkEmailUnread : Icons.Material.Filled.MarkEmailRead)"
+                                 Color="@(string.IsNullOrEmpty(context.UserReply) ? Color.Warning : Color.Success)" />
+                    </MudTooltip>
+                }
+                else
+                {
+                    <span style="color:var(--mud-palette-text-disabled)">—</span>
+                }
+            </MudTd>
             <MudTd DataLabel="Retries">@context.RetryCount</MudTd>
             <MudTd DataLabel="Rows Inserted">@(context.RowsInserted?.ToString() ?? "—")</MudTd>
             <MudTd DataLabel="Actions">
@@ -170,6 +185,24 @@ else
         @if (_selectedJob is not null)
         {
             <MudText Typo="Typo.subtitle2" Class="mb-2">Status: <strong>@_selectedJob.Status</strong></MudText>
+
+            @if (!string.IsNullOrEmpty(_selectedJob.NotificationRef))
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    <strong>Notification Reference:</strong> @_selectedJob.NotificationRef
+                    — The agent sent an alert email with this token in the subject line and is
+                    monitoring the inbox for a reply on that thread.
+                </MudAlert>
+            }
+
+            @if (!string.IsNullOrEmpty(_selectedJob.UserReply))
+            {
+                <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">
+                    <strong>Reply received:</strong><br />
+                    <pre style="font-size:.85em; white-space:pre-wrap; margin:4px 0 0;">@_selectedJob.UserReply</pre>
+                </MudAlert>
+            }
+
             @if (!string.IsNullOrEmpty(_selectedJob.ErrorMessage))
             {
                 <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_selectedJob.ErrorMessage</MudAlert>
@@ -237,7 +270,7 @@ else
         _completed        = _jobs.Count(j => j.Status == "Completed");
         _inProgress       = _jobs.Count(j => j.Status is "Detected" or "Validating" or "Inserting" or "Retrying");
         _failed           = _jobs.Count(j => j.Status is "Failed" or "Rejected");
-        _awaitingApproval = _jobs.Count(j => j.Status is "AwaitingApproval" or "ValidationFailed");
+        _awaitingApproval = _jobs.Count(j => j.Status is "AwaitingApproval" or "ValidationFailed" or "ReplyReceived");
     }
 
     private void BuildActivityLog()
@@ -333,6 +366,7 @@ else
             "Rejected"         => (Color.Dark,      Icons.Material.Filled.Cancel),
             "ValidationFailed" => (Color.Warning,   Icons.Material.Filled.WarningAmber),
             "AwaitingApproval" => (Color.Info,      Icons.Material.Filled.MarkEmailUnread),
+            "ReplyReceived"    => (Color.Success,   Icons.Material.Filled.MarkEmailRead),
             "Retrying"         => (Color.Secondary, Icons.Material.Filled.Replay),
             _                  => (Color.Default,   Icons.Material.Filled.HourglassTop)
         };
