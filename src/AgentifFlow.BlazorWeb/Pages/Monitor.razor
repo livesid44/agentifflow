@@ -4,7 +4,9 @@
 @inject IBlobJobApiService JobService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
-@implements IDisposable
+@inject IConfiguration Config
+@implements IAsyncDisposable
+@using Microsoft.AspNetCore.SignalR.Client
 
 <PageTitle>Dashboard</PageTitle>
 
@@ -54,6 +56,14 @@
                OnClick="LoadJobsAsync" Disabled="@_loading">
         Refresh
     </MudButton>
+    <!-- SignalR live indicator -->
+    <MudTooltip Text="@(_hubConnected ? "Live updates active" : "Live updates disconnected — polling every 15 s")">
+        <MudChip T="string"
+                 Icon="@(_hubConnected ? Icons.Material.Filled.Wifi : Icons.Material.Filled.WifiOff)"
+                 Color="@(_hubConnected ? Color.Success : Color.Warning)"
+                 Size="Size.Small"
+                 Text="@(_hubConnected ? "Live" : "Polling")" />
+    </MudTooltip>
     <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-disabled);">
         @if (_lastRefresh.HasValue)
         {
@@ -234,15 +244,104 @@ else
     private int _failed;
     private int _awaitingApproval;
 
+    // SignalR
+    private HubConnection? _hubConnection;
+    private bool _hubConnected;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadJobsAsync();
+        await ConnectSignalRAsync();
+
+        // Fallback polling — keeps data fresh if SignalR is disconnected.
         _refreshTimer = new Timer(async _ =>
         {
             await LoadJobsAsync();
             await InvokeAsync(StateHasChanged);
         }, null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
     }
+
+    // ── SignalR ───────────────────────────────────────────────────────────────
+
+    private async Task ConnectSignalRAsync()
+    {
+        try
+        {
+            var apiBase = Config["ApiConfig:BaseUrl"] ?? "http://localhost:5045";
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl($"{apiBase}/hubs/agent")
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<BlobWatcherJobDto>("JobCreated", OnJobCreated);
+            _hubConnection.On<BlobWatcherJobDto>("JobUpdated", OnJobUpdated);
+
+            _hubConnection.Reconnecting  += _ => { _hubConnected = false; InvokeAsync(StateHasChanged); return Task.CompletedTask; };
+            _hubConnection.Reconnected   += _ => { _hubConnected = true;  InvokeAsync(StateHasChanged); return Task.CompletedTask; };
+            _hubConnection.Closed        += _ => { _hubConnected = false; InvokeAsync(StateHasChanged); return Task.CompletedTask; };
+
+            await _hubConnection.StartAsync();
+            _hubConnected = true;
+        }
+        catch
+        {
+            // SignalR is optional — fall back to polling if the hub is unreachable.
+            _hubConnected = false;
+        }
+    }
+
+    private void OnJobCreated(BlobWatcherJobDto dto)
+    {
+        InvokeAsync(() =>
+        {
+            // Prepend to list so newest is first.
+            _jobs.Insert(0, dto);
+            _lastRefresh = DateTime.UtcNow;
+            ComputeSummary();
+            BuildActivityLog();
+
+            Snackbar.Add($"New job detected: {dto.BlobName}", Severity.Info,
+                cfg => { cfg.ShowCloseIcon = true; cfg.VisibleStateDuration = 4000; });
+            StateHasChanged();
+        });
+    }
+
+    private void OnJobUpdated(BlobWatcherJobDto dto)
+    {
+        InvokeAsync(() =>
+        {
+            var idx = _jobs.FindIndex(j => j.Id == dto.Id);
+            if (idx >= 0)
+                _jobs[idx] = dto;
+            else
+                _jobs.Insert(0, dto);
+
+            _lastRefresh = DateTime.UtcNow;
+            ComputeSummary();
+            BuildActivityLog();
+
+            // Show prominent snackbar only for key status transitions.
+            var (msg, sev) = dto.Status switch
+            {
+                "Completed"        => ($"✅ Job completed: {dto.BlobName} ({dto.RowsInserted} rows)",  Severity.Success),
+                "Failed"           => ($"❌ Job failed: {dto.BlobName}",                               Severity.Error),
+                "ValidationFailed" => ($"⚠️ Validation failed: {dto.BlobName}",                       Severity.Warning),
+                "AwaitingApproval" => ($"🔔 Awaiting approval: {dto.BlobName}",                        Severity.Info),
+                "ReplyReceived"    => ($"📧 Reply received for: {dto.BlobName}",                       Severity.Success),
+                _ => (null, Severity.Normal)
+            };
+            if (msg is not null)
+                Snackbar.Add(msg, sev, cfg => { cfg.ShowCloseIcon = true; cfg.VisibleStateDuration = 5000; });
+
+            // If log dialog is open for this job, refresh the selected job data.
+            if (_logDialogVisible && _selectedJob?.Id == dto.Id)
+                _selectedJob = dto;
+
+            StateHasChanged();
+        });
+    }
+
+    // ── Data loading ──────────────────────────────────────────────────────────
 
     private async Task LoadJobsAsync()
     {
@@ -386,7 +485,12 @@ else
         _              => Color.Default,
     };
 
-    public void Dispose() => _refreshTimer?.Dispose();
+    public async ValueTask DisposeAsync()
+    {
+        _refreshTimer?.Dispose();
+        if (_hubConnection is not null)
+            await _hubConnection.DisposeAsync();
+    }
 
     private record ActivityLogEntry(DateTime Timestamp, string Source, string Event, string Details);
 }

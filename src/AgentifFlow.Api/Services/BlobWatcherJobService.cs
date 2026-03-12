@@ -8,11 +8,16 @@ public class BlobWatcherJobService : IBlobWatcherJobService
 {
     private readonly AgentifFlowDbContext _db;
     private readonly ILogger<BlobWatcherJobService> _logger;
+    private readonly IAgentNotificationService _notifications;
 
-    public BlobWatcherJobService(AgentifFlowDbContext db, ILogger<BlobWatcherJobService> logger)
+    public BlobWatcherJobService(
+        AgentifFlowDbContext db,
+        ILogger<BlobWatcherJobService> logger,
+        IAgentNotificationService notifications)
     {
-        _db = db;
-        _logger = logger;
+        _db            = db;
+        _logger        = logger;
+        _notifications = notifications;
     }
 
     public async Task<IEnumerable<BlobWatcherJobDto>> GetAllAsync(int? limit = 50)
@@ -46,6 +51,7 @@ public class BlobWatcherJobService : IBlobWatcherJobService
         _db.BlobWatcherJobs.Add(job);
         await _db.SaveChangesAsync();
         _logger.LogInformation("BlobWatcherJob created for blob '{BlobName}'", blobName);
+        await _notifications.NotifyJobCreatedAsync(ToDto(job));
         return job;
     }
 
@@ -70,6 +76,7 @@ public class BlobWatcherJobService : IBlobWatcherJobService
             job.CompletedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
+        await _notifications.NotifyJobUpdatedAsync(ToDto(job));
         return job;
     }
 
@@ -86,6 +93,7 @@ public class BlobWatcherJobService : IBlobWatcherJobService
             : $"{job.LogDetails}\n[{DateTime.UtcNow:u}] Retry {job.RetryCount} initiated.";
 
         await _db.SaveChangesAsync();
+        await _notifications.NotifyJobUpdatedAsync(ToDto(job));
         return job;
     }
 
@@ -97,15 +105,25 @@ public class BlobWatcherJobService : IBlobWatcherJobService
         job.RowsInserted = rows;
         job.UpdatedAt    = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+        await _notifications.NotifyJobUpdatedAsync(ToDto(job));
         return job;
     }
 
     public async Task<bool> ExistsAsync(string blobName, string? containerName)
     {
+        // Only block re-processing when a job for this blob is actively in-flight or
+        // awaiting human action.  A Completed job must NOT block re-processing so that
+        // the agent continues to trigger on every configured poll interval regardless of
+        // whether the previous run was successful.
         return await _db.BlobWatcherJobs.AnyAsync(j =>
             j.BlobName == blobName && j.ContainerName == containerName &&
-            j.Status != BlobWatcherJobStatus.Failed &&
-            j.Status != BlobWatcherJobStatus.Rejected);
+            (j.Status == BlobWatcherJobStatus.Detected         ||
+             j.Status == BlobWatcherJobStatus.Validating        ||
+             j.Status == BlobWatcherJobStatus.ValidationFailed  ||
+             j.Status == BlobWatcherJobStatus.AwaitingApproval  ||
+             j.Status == BlobWatcherJobStatus.Inserting         ||
+             j.Status == BlobWatcherJobStatus.Retrying          ||
+             j.Status == BlobWatcherJobStatus.ReplyReceived));
     }
 
     public async Task<BlobWatcherJob?> SetNotificationRefAsync(int id, string notificationRef)
@@ -116,6 +134,7 @@ public class BlobWatcherJobService : IBlobWatcherJobService
         job.NotificationRef = notificationRef;
         job.UpdatedAt       = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+        await _notifications.NotifyJobUpdatedAsync(ToDto(job));
         return job;
     }
 
@@ -132,6 +151,7 @@ public class BlobWatcherJobService : IBlobWatcherJobService
             : $"{job.LogDetails}\n[{DateTime.UtcNow:u}] Reply received from {fromAddress}: {replyPreview[..Math.Min(200, replyPreview.Length)]}";
 
         await _db.SaveChangesAsync();
+        await _notifications.NotifyJobUpdatedAsync(ToDto(job));
         return job;
     }
 

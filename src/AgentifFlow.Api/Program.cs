@@ -1,4 +1,5 @@
 using AgentifFlow.Api.Data;
+using AgentifFlow.Api.Hubs;
 using AgentifFlow.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -97,6 +98,10 @@ builder.Services.AddScoped<IAppConfigurationService, AppConfigurationService>();
 builder.Services.AddScoped<IBlobWatcherJobService, BlobWatcherJobService>();
 builder.Services.AddScoped<ICsvValidationService, CsvValidationService>();
 builder.Services.AddHostedService<BlobWatcherBackgroundService>();
+
+// ── SignalR (real-time agent notifications) ───────────────────────────────────
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IAgentNotificationService, AgentNotificationService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -266,6 +271,7 @@ app.UseCors(frontendOrigins);
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<AgentNotificationHub>("/hubs/agent");
 
 app.Run();
 

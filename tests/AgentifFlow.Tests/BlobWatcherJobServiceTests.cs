@@ -3,6 +3,7 @@ using AgentifFlow.Api.Models;
 using AgentifFlow.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 
 namespace AgentifFlow.Tests;
 
@@ -16,11 +17,21 @@ public class BlobWatcherJobServiceTests
         return new AgentifFlowDbContext(options);
     }
 
+    private static BlobWatcherJobService CreateSvc(AgentifFlowDbContext db)
+    {
+        var mockNotifications = new Mock<IAgentNotificationService>();
+        mockNotifications.Setup(n => n.NotifyJobCreatedAsync(It.IsAny<BlobWatcherJobDto>()))
+                         .Returns(Task.CompletedTask);
+        mockNotifications.Setup(n => n.NotifyJobUpdatedAsync(It.IsAny<BlobWatcherJobDto>()))
+                         .Returns(Task.CompletedTask);
+        return new BlobWatcherJobService(db, NullLogger<BlobWatcherJobService>.Instance, mockNotifications.Object);
+    }
+
     [Fact]
     public async Task CreateAsync_PersistsJob()
     {
         using var db = CreateDb(nameof(CreateAsync_PersistsJob));
-        var svc = new BlobWatcherJobService(db, NullLogger<BlobWatcherJobService>.Instance);
+        var svc = CreateSvc(db);
 
         var job = await svc.CreateAsync("data.csv", "uploads");
 
@@ -34,7 +45,7 @@ public class BlobWatcherJobServiceTests
     public async Task UpdateStatusAsync_ChangesStatus()
     {
         using var db = CreateDb(nameof(UpdateStatusAsync_ChangesStatus));
-        var svc = new BlobWatcherJobService(db, NullLogger<BlobWatcherJobService>.Instance);
+        var svc = CreateSvc(db);
 
         var created = await svc.CreateAsync("test.csv", "container");
         var updated = await svc.UpdateStatusAsync(created.Id, BlobWatcherJobStatus.Validating, logEntry: "Started.");
@@ -48,7 +59,7 @@ public class BlobWatcherJobServiceTests
     public async Task UpdateStatusAsync_SetsCompletedAt_WhenCompleted()
     {
         using var db = CreateDb(nameof(UpdateStatusAsync_SetsCompletedAt_WhenCompleted));
-        var svc = new BlobWatcherJobService(db, NullLogger<BlobWatcherJobService>.Instance);
+        var svc = CreateSvc(db);
 
         var created = await svc.CreateAsync("done.csv", "c");
         var updated = await svc.UpdateStatusAsync(created.Id, BlobWatcherJobStatus.Completed);
@@ -60,7 +71,7 @@ public class BlobWatcherJobServiceTests
     public async Task IncrementRetryAsync_IncrementsCounter()
     {
         using var db = CreateDb(nameof(IncrementRetryAsync_IncrementsCounter));
-        var svc = new BlobWatcherJobService(db, NullLogger<BlobWatcherJobService>.Instance);
+        var svc = CreateSvc(db);
 
         var created = await svc.CreateAsync("retry.csv", "c");
         var updated = await svc.IncrementRetryAsync(created.Id);
@@ -73,7 +84,7 @@ public class BlobWatcherJobServiceTests
     public async Task ExistsAsync_ReturnsTrueForActiveJob()
     {
         using var db = CreateDb(nameof(ExistsAsync_ReturnsTrueForActiveJob));
-        var svc = new BlobWatcherJobService(db, NullLogger<BlobWatcherJobService>.Instance);
+        var svc = CreateSvc(db);
 
         await svc.CreateAsync("active.csv", "container");
         var exists = await svc.ExistsAsync("active.csv", "container");
@@ -85,7 +96,7 @@ public class BlobWatcherJobServiceTests
     public async Task ExistsAsync_ReturnsFalseAfterRejection()
     {
         using var db = CreateDb(nameof(ExistsAsync_ReturnsFalseAfterRejection));
-        var svc = new BlobWatcherJobService(db, NullLogger<BlobWatcherJobService>.Instance);
+        var svc = CreateSvc(db);
 
         var created = await svc.CreateAsync("rejected.csv", "c");
         await svc.UpdateStatusAsync(created.Id, BlobWatcherJobStatus.Rejected);
@@ -94,11 +105,31 @@ public class BlobWatcherJobServiceTests
         Assert.False(exists);
     }
 
+    /// <summary>
+    /// After a blob is successfully processed (Completed), the next poll cycle must
+    /// NOT be blocked — ExistsAsync must return false so a new job is created and
+    /// the agent triggers again on the configured frequency.
+    /// </summary>
+    [Fact]
+    public async Task ExistsAsync_ReturnsFalseAfterCompletion()
+    {
+        using var db = CreateDb(nameof(ExistsAsync_ReturnsFalseAfterCompletion));
+        var svc = CreateSvc(db);
+
+        var created = await svc.CreateAsync("success.csv", "c");
+        await svc.UpdateStatusAsync(created.Id, BlobWatcherJobStatus.Completed);
+
+        var exists = await svc.ExistsAsync("success.csv", "c");
+
+        // Completed must not block re-processing — agent triggers every poll interval.
+        Assert.False(exists);
+    }
+
     [Fact]
     public async Task GetAllAsync_ReturnsJobsOrderedByNewest()
     {
         using var db = CreateDb(nameof(GetAllAsync_ReturnsJobsOrderedByNewest));
-        var svc = new BlobWatcherJobService(db, NullLogger<BlobWatcherJobService>.Instance);
+        var svc = CreateSvc(db);
 
         await svc.CreateAsync("first.csv", "c");
         await Task.Delay(10);
@@ -113,12 +144,45 @@ public class BlobWatcherJobServiceTests
     public async Task SetRowsInsertedAsync_SetsValue()
     {
         using var db = CreateDb(nameof(SetRowsInsertedAsync_SetsValue));
-        var svc = new BlobWatcherJobService(db, NullLogger<BlobWatcherJobService>.Instance);
+        var svc = CreateSvc(db);
 
         var created = await svc.CreateAsync("rows.csv", "c");
         await svc.SetRowsInsertedAsync(created.Id, 42);
 
         var dto = await svc.GetByIdAsync(created.Id);
         Assert.Equal(42, dto!.RowsInserted);
+    }
+
+    [Fact]
+    public async Task CreateAsync_BroadcastsJobCreatedNotification()
+    {
+        using var db = CreateDb(nameof(CreateAsync_BroadcastsJobCreatedNotification));
+        var mockNotifications = new Mock<IAgentNotificationService>();
+        mockNotifications.Setup(n => n.NotifyJobCreatedAsync(It.IsAny<BlobWatcherJobDto>()))
+                         .Returns(Task.CompletedTask);
+        mockNotifications.Setup(n => n.NotifyJobUpdatedAsync(It.IsAny<BlobWatcherJobDto>()))
+                         .Returns(Task.CompletedTask);
+        var svc = new BlobWatcherJobService(db, NullLogger<BlobWatcherJobService>.Instance, mockNotifications.Object);
+
+        await svc.CreateAsync("notify.csv", "c");
+
+        mockNotifications.Verify(n => n.NotifyJobCreatedAsync(It.Is<BlobWatcherJobDto>(d => d.BlobName == "notify.csv")), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_BroadcastsJobUpdatedNotification()
+    {
+        using var db = CreateDb(nameof(UpdateStatusAsync_BroadcastsJobUpdatedNotification));
+        var mockNotifications = new Mock<IAgentNotificationService>();
+        mockNotifications.Setup(n => n.NotifyJobCreatedAsync(It.IsAny<BlobWatcherJobDto>()))
+                         .Returns(Task.CompletedTask);
+        mockNotifications.Setup(n => n.NotifyJobUpdatedAsync(It.IsAny<BlobWatcherJobDto>()))
+                         .Returns(Task.CompletedTask);
+        var svc = new BlobWatcherJobService(db, NullLogger<BlobWatcherJobService>.Instance, mockNotifications.Object);
+
+        var job = await svc.CreateAsync("notify2.csv", "c");
+        await svc.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Completed);
+
+        mockNotifications.Verify(n => n.NotifyJobUpdatedAsync(It.Is<BlobWatcherJobDto>(d => d.Status == "Completed")), Times.Once);
     }
 }
