@@ -164,12 +164,12 @@ export default function LoginPage() {
       {/* ── Right: Dark Form Panel ─────────────────────────────────────────── */}
       <div className="login-panel">
 
-        {/* Corner logo (top-right) */}
+        {/* Corner logo (top-right) — Tech M Orion Marketplace */}
         <div className="lp-logo">
           <LogoMark size={34} />
           <div className="lp-logo-text">
-            <span className="lp-logo-line1">AGENTIF</span>
-            <span className="lp-logo-line2">flow</span>
+            <span className="lp-logo-line1">TECH M ORION</span>
+            <span className="lp-logo-line2">Marketplace</span>
           </div>
         </div>
 
