@@ -18,6 +18,20 @@ public class AppConfigurationDto
     public int BlobPollIntervalSeconds { get; set; } = 60;
     public int MaxRetryCount { get; set; } = 3;
     public bool AgentFlowEnabled { get; set; }
+    // Agent Designer
+    public bool BlobEnabled { get; set; }
+    public string? BlobReadEmailId { get; set; }
+    public bool BlobReadEmailAppendDate { get; set; }
+    public string? BlobInputFilePattern { get; set; }
+    public bool BlobInputAppendDate { get; set; } = true;
+    public string? BlobArchiveFilePattern { get; set; }
+    public bool BlobArchiveAppendDate { get; set; } = true;
+    public bool NotifyOnSuccess { get; set; }
+    public bool NotifyOnFileNotFound { get; set; } = true;
+    public bool NotifyOnDataIssue { get; set; } = true;
+    public bool SqlPushEnabled { get; set; }
+    public string? SqlTargetTable { get; set; }
+    public string? SqlColumnMappingJson { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
@@ -40,6 +54,20 @@ public class UpdateAppConfigurationRequest
     public int? BlobPollIntervalSeconds { get; set; }
     public int? MaxRetryCount { get; set; }
     public bool? AgentFlowEnabled { get; set; }
+    // Agent Designer
+    public bool? BlobEnabled { get; set; }
+    public string? BlobReadEmailId { get; set; }
+    public bool? BlobReadEmailAppendDate { get; set; }
+    public string? BlobInputFilePattern { get; set; }
+    public bool? BlobInputAppendDate { get; set; }
+    public string? BlobArchiveFilePattern { get; set; }
+    public bool? BlobArchiveAppendDate { get; set; }
+    public bool? NotifyOnSuccess { get; set; }
+    public bool? NotifyOnFileNotFound { get; set; }
+    public bool? NotifyOnDataIssue { get; set; }
+    public bool? SqlPushEnabled { get; set; }
+    public string? SqlTargetTable { get; set; }
+    public string? SqlColumnMappingJson { get; set; }
 }
 
 /// <summary>

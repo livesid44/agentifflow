@@ -50,6 +50,21 @@ public class AppConfigurationService : IAppConfigurationService
         if (request.MaxRetryCount.HasValue) config.MaxRetryCount = request.MaxRetryCount.Value;
         if (request.AgentFlowEnabled.HasValue) config.AgentFlowEnabled = request.AgentFlowEnabled.Value;
 
+        // Agent Designer fields
+        if (request.BlobEnabled.HasValue)             config.BlobEnabled             = request.BlobEnabled.Value;
+        if (request.BlobReadEmailId is not null)      config.BlobReadEmailId         = request.BlobReadEmailId;
+        if (request.BlobReadEmailAppendDate.HasValue) config.BlobReadEmailAppendDate = request.BlobReadEmailAppendDate.Value;
+        if (request.BlobInputFilePattern is not null) config.BlobInputFilePattern    = request.BlobInputFilePattern;
+        if (request.BlobInputAppendDate.HasValue)     config.BlobInputAppendDate     = request.BlobInputAppendDate.Value;
+        if (request.BlobArchiveFilePattern is not null) config.BlobArchiveFilePattern = request.BlobArchiveFilePattern;
+        if (request.BlobArchiveAppendDate.HasValue)   config.BlobArchiveAppendDate   = request.BlobArchiveAppendDate.Value;
+        if (request.NotifyOnSuccess.HasValue)         config.NotifyOnSuccess         = request.NotifyOnSuccess.Value;
+        if (request.NotifyOnFileNotFound.HasValue)    config.NotifyOnFileNotFound    = request.NotifyOnFileNotFound.Value;
+        if (request.NotifyOnDataIssue.HasValue)       config.NotifyOnDataIssue       = request.NotifyOnDataIssue.Value;
+        if (request.SqlPushEnabled.HasValue)          config.SqlPushEnabled          = request.SqlPushEnabled.Value;
+        if (request.SqlTargetTable is not null)       config.SqlTargetTable          = request.SqlTargetTable;
+        if (request.SqlColumnMappingJson is not null) config.SqlColumnMappingJson    = request.SqlColumnMappingJson;
+
         config.UpdatedAt = DateTime.UtcNow;
         config.UpdatedBy = updatedBy;
 
@@ -101,6 +116,20 @@ public class AppConfigurationService : IAppConfigurationService
         BlobPollIntervalSeconds = config.BlobPollIntervalSeconds,
         MaxRetryCount = config.MaxRetryCount,
         AgentFlowEnabled = config.AgentFlowEnabled,
+        // Agent Designer
+        BlobEnabled             = config.BlobEnabled,
+        BlobReadEmailId         = config.BlobReadEmailId,
+        BlobReadEmailAppendDate = config.BlobReadEmailAppendDate,
+        BlobInputFilePattern    = config.BlobInputFilePattern,
+        BlobInputAppendDate     = config.BlobInputAppendDate,
+        BlobArchiveFilePattern  = config.BlobArchiveFilePattern,
+        BlobArchiveAppendDate   = config.BlobArchiveAppendDate,
+        NotifyOnSuccess         = config.NotifyOnSuccess,
+        NotifyOnFileNotFound    = config.NotifyOnFileNotFound,
+        NotifyOnDataIssue       = config.NotifyOnDataIssue,
+        SqlPushEnabled          = config.SqlPushEnabled,
+        SqlTargetTable          = config.SqlTargetTable,
+        SqlColumnMappingJson    = config.SqlColumnMappingJson,
         UpdatedAt = config.UpdatedAt,
         UpdatedBy = config.UpdatedBy
     };

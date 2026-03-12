@@ -60,6 +60,45 @@ public class AppConfiguration
 
     public bool AgentFlowEnabled { get; set; } = false;
 
+    // ── Agent Designer — Blob Source ─────────────────────────────────────────
+    public bool BlobEnabled { get; set; } = false;
+
+    /// <summary>Email address / mailbox to watch for file notifications (Blob input source).</summary>
+    [MaxLength(300)]
+    public string? BlobReadEmailId { get; set; }
+
+    /// <summary>When true, today's date is appended to the read-email identifier pattern.</summary>
+    public bool BlobReadEmailAppendDate { get; set; } = false;
+
+    /// <summary>Input file name prefix, e.g. "test". Combined with getdate() when BlobInputAppendDate is true.</summary>
+    [MaxLength(300)]
+    public string? BlobInputFilePattern { get; set; }
+
+    /// <summary>When true, getdate() is appended to the input file pattern, e.g. "test_20260312".</summary>
+    public bool BlobInputAppendDate { get; set; } = true;
+
+    /// <summary>Archive file name prefix, e.g. "archive_test". Combined with getdate() when BlobArchiveAppendDate is true.</summary>
+    [MaxLength(300)]
+    public string? BlobArchiveFilePattern { get; set; }
+
+    /// <summary>When true, getdate() is appended to the archive file pattern.</summary>
+    public bool BlobArchiveAppendDate { get; set; } = true;
+
+    // ── Agent Designer — Email Notifications ─────────────────────────────────
+    public bool NotifyOnSuccess { get; set; } = false;
+    public bool NotifyOnFileNotFound { get; set; } = true;
+    public bool NotifyOnDataIssue { get; set; } = true;
+
+    // ── Agent Designer — SQL Push ─────────────────────────────────────────────
+    public bool SqlPushEnabled { get; set; } = false;
+
+    /// <summary>Target SQL table name for data push.</summary>
+    [MaxLength(300)]
+    public string? SqlTargetTable { get; set; }
+
+    /// <summary>JSON array of column mapping objects: [{"source":"col","target":"col"},…]</summary>
+    public string? SqlColumnMappingJson { get; set; }
+
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     [MaxLength(200)]
@@ -84,6 +123,20 @@ public class AppConfigurationDto
     public int BlobPollIntervalSeconds { get; set; } = 60;
     public int MaxRetryCount { get; set; } = 3;
     public bool AgentFlowEnabled { get; set; }
+    // Agent Designer
+    public bool BlobEnabled { get; set; }
+    public string? BlobReadEmailId { get; set; }
+    public bool BlobReadEmailAppendDate { get; set; }
+    public string? BlobInputFilePattern { get; set; }
+    public bool BlobInputAppendDate { get; set; } = true;
+    public string? BlobArchiveFilePattern { get; set; }
+    public bool BlobArchiveAppendDate { get; set; } = true;
+    public bool NotifyOnSuccess { get; set; }
+    public bool NotifyOnFileNotFound { get; set; } = true;
+    public bool NotifyOnDataIssue { get; set; } = true;
+    public bool SqlPushEnabled { get; set; }
+    public string? SqlTargetTable { get; set; }
+    public string? SqlColumnMappingJson { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
@@ -139,4 +192,23 @@ public class UpdateAppConfigurationRequest
     public int? BlobPollIntervalSeconds { get; set; }
     public int? MaxRetryCount { get; set; }
     public bool? AgentFlowEnabled { get; set; }
+
+    // Agent Designer
+    public bool? BlobEnabled { get; set; }
+    [MaxLength(300)]
+    public string? BlobReadEmailId { get; set; }
+    public bool? BlobReadEmailAppendDate { get; set; }
+    [MaxLength(300)]
+    public string? BlobInputFilePattern { get; set; }
+    public bool? BlobInputAppendDate { get; set; }
+    [MaxLength(300)]
+    public string? BlobArchiveFilePattern { get; set; }
+    public bool? BlobArchiveAppendDate { get; set; }
+    public bool? NotifyOnSuccess { get; set; }
+    public bool? NotifyOnFileNotFound { get; set; }
+    public bool? NotifyOnDataIssue { get; set; }
+    public bool? SqlPushEnabled { get; set; }
+    [MaxLength(300)]
+    public string? SqlTargetTable { get; set; }
+    public string? SqlColumnMappingJson { get; set; }
 }

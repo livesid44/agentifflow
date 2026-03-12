@@ -1,0 +1,580 @@
+@page "/agent-designer"
+@attribute [Authorize]
+@inject IConfigurationApiService ConfigService
+@inject ISnackbar Snackbar
+@using System.Text.Json
+
+<PageTitle>Agent Designer — AgentifFlow</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-1" Style="font-weight:700; letter-spacing:-0.5px;">
+    Agent Designer
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-6" Style="color:var(--mud-palette-text-secondary);">
+    Design your agentic pipeline visually. Enable the steps you need and configure each stage below.
+</MudText>
+
+@if (_loading)
+{
+    <div class="d-flex justify-center mt-16">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Large" />
+    </div>
+}
+else if (_loadError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">@_loadError</MudAlert>
+}
+else
+{
+    <!-- ── Pipeline flow ──────────────────────────────────────────────────────── -->
+    <div class="agent-pipeline">
+
+        <!-- Step 1 · Blob Input ────────────────────────────────────────────────── -->
+        <MudCard Elevation="3" Class="@(_blobEnabled ? "pipeline-step step-active" : "pipeline-step step-inactive")">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="@(_blobEnabled ? Color.Primary : Color.Default)" Size="Size.Medium">
+                        <MudIcon Icon="@Icons.Material.Outlined.CloudDownload" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6" Style="font-weight:700;">Step 1 — Blob Input</MudText>
+                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
+                        Watch Blob Storage for incoming files
+                    </MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudSwitch @bind-Value="_blobEnabled"
+                               Color="Color.Primary"
+                               Label="@(_blobEnabled ? "Enabled" : "Disabled")" />
+                </CardHeaderActions>
+            </MudCardHeader>
+
+            @if (_blobEnabled)
+            {
+                <MudCardContent>
+                    <MudGrid Spacing="3">
+                        <!-- Read email ID ─────────────────────────────────── -->
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.subtitle2" Class="mb-1" Style="font-weight:600;">
+                                Read Email ID
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="mb-2" Style="color:var(--mud-palette-text-secondary);">
+                                Mailbox to monitor for blob-arrival notification emails (e.g. inbox@contoso.com).
+                            </MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="8">
+                            <MudTextField @bind-Value="_blobReadEmailId"
+                                          Label="Read Email ID"
+                                          Placeholder="inbox@contoso.com"
+                                          InputType="InputType.Email"
+                                          Variant="Variant.Outlined"
+                                          FullWidth="true"
+                                          Adornment="Adornment.Start"
+                                          AdornmentIcon="@Icons.Material.Outlined.Email" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4" Class="d-flex align-center">
+                            <MudTooltip Text="Appends today's date (yyyyMMdd) to the email identifier pattern">
+                                <MudSwitch @bind-Value="_blobReadEmailAppendDate"
+                                           Color="Color.Secondary"
+                                           Label="Append getdate()" />
+                            </MudTooltip>
+                        </MudItem>
+                        @if (!string.IsNullOrWhiteSpace(_blobReadEmailId))
+                        {
+                            <MudItem xs="12">
+                                <MudAlert Severity="Severity.Info" Dense="true">
+                                    Effective pattern:&nbsp;<strong>@PreviewEmail(_blobReadEmailId, _blobReadEmailAppendDate)</strong>
+                                </MudAlert>
+                            </MudItem>
+                        }
+
+                        <MudItem xs="12"><MudDivider /></MudItem>
+
+                        <!-- Input file name ────────────────────────────────── -->
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.subtitle2" Class="mb-1" Style="font-weight:600;">
+                                Input File Name Pattern
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="mb-2" Style="color:var(--mud-palette-text-secondary);">
+                                The file name prefix to look for in the blob container. e.g. "test"
+                            </MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="8">
+                            <MudTextField @bind-Value="_blobInputFilePattern"
+                                          Label="Input File Pattern"
+                                          Placeholder="test"
+                                          Variant="Variant.Outlined"
+                                          FullWidth="true"
+                                          Adornment="Adornment.Start"
+                                          AdornmentIcon="@Icons.Material.Outlined.InsertDriveFile" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4" Class="d-flex align-center">
+                            <MudTooltip Text="Appends today's date (yyyyMMdd) to the file name, e.g. test_20260312.csv">
+                                <MudSwitch @bind-Value="_blobInputAppendDate"
+                                           Color="Color.Secondary"
+                                           Label="Append getdate()" />
+                            </MudTooltip>
+                        </MudItem>
+                        @if (!string.IsNullOrWhiteSpace(_blobInputFilePattern))
+                        {
+                            <MudItem xs="12">
+                                <MudAlert Severity="Severity.Info" Dense="true">
+                                    Effective file name:&nbsp;<strong>@PreviewFileName(_blobInputFilePattern, _blobInputAppendDate)</strong>
+                                </MudAlert>
+                            </MudItem>
+                        }
+
+                        <MudItem xs="12"><MudDivider /></MudItem>
+
+                        <!-- Archive file name ───────────────────────────────── -->
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.subtitle2" Class="mb-1" Style="font-weight:600;">
+                                Archive File Name Pattern
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="mb-2" Style="color:var(--mud-palette-text-secondary);">
+                                The file is renamed to this after a successful upload. e.g. "archive_test"
+                            </MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="8">
+                            <MudTextField @bind-Value="_blobArchiveFilePattern"
+                                          Label="Archive File Pattern"
+                                          Placeholder="archive_test"
+                                          Variant="Variant.Outlined"
+                                          FullWidth="true"
+                                          Adornment="Adornment.Start"
+                                          AdornmentIcon="@Icons.Material.Outlined.Archive" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4" Class="d-flex align-center">
+                            <MudTooltip Text="Appends today's date (yyyyMMdd) to the archive file name, e.g. archive_test_20260312.csv">
+                                <MudSwitch @bind-Value="_blobArchiveAppendDate"
+                                           Color="Color.Secondary"
+                                           Label="Append getdate()" />
+                            </MudTooltip>
+                        </MudItem>
+                        @if (!string.IsNullOrWhiteSpace(_blobArchiveFilePattern))
+                        {
+                            <MudItem xs="12">
+                                <MudAlert Severity="Severity.Info" Dense="true">
+                                    Renamed to:&nbsp;<strong>@PreviewFileName(_blobArchiveFilePattern, _blobArchiveAppendDate)</strong>
+                                </MudAlert>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudCardContent>
+            }
+        </MudCard>
+
+        <!-- Arrow ───────────────────────────────────────────────────────────── -->
+        <div class="pipeline-arrow">
+            <MudIcon Icon="@Icons.Material.Filled.ArrowDownward"
+                     Style="color:var(--mud-palette-text-disabled); font-size:2rem;" />
+        </div>
+
+        <!-- Step 2 · Email Notifications ──────────────────────────────────────── -->
+        <MudCard Elevation="3" Class="pipeline-step step-always-on">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Warning" Size="Size.Medium">
+                        <MudIcon Icon="@Icons.Material.Outlined.NotificationsActive" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6" Style="font-weight:700;">Step 2 — Email Notifications</MudText>
+                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
+                        Choose which events trigger an email to the Notification Email address
+                    </MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="1" Class="pa-3 rounded-lg" Style="border-left: 4px solid #4caf50;">
+                            <MudCheckBox @bind-Value="_notifyOnSuccess"
+                                         Color="Color.Success"
+                                         Label="On Success"
+                                         Dense="true" />
+                            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary); padding-left:36px;">
+                                Notify when a file is processed successfully.
+                            </MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="1" Class="pa-3 rounded-lg" Style="border-left: 4px solid #ff9800;">
+                            <MudCheckBox @bind-Value="_notifyOnFileNotFound"
+                                         Color="Color.Warning"
+                                         Label="File Not Found"
+                                         Dense="true" />
+                            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary); padding-left:36px;">
+                                Notify when the expected file is absent after the poll.
+                            </MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="1" Class="pa-3 rounded-lg" Style="border-left: 4px solid #f44336;">
+                            <MudCheckBox @bind-Value="_notifyOnDataIssue"
+                                         Color="Color.Error"
+                                         Label="Data Issue"
+                                         Dense="true" />
+                            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary); padding-left:36px;">
+                                Notify when validation or SQL insert errors occur.
+                            </MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+
+        <!-- Arrow ───────────────────────────────────────────────────────────── -->
+        <div class="pipeline-arrow">
+            <MudIcon Icon="@Icons.Material.Filled.ArrowDownward"
+                     Style="color:var(--mud-palette-text-disabled); font-size:2rem;" />
+        </div>
+
+        <!-- Step 3 · SQL Output ────────────────────────────────────────────────── -->
+        <MudCard Elevation="3" Class="@(_sqlPushEnabled ? "pipeline-step step-active" : "pipeline-step step-inactive")">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="@(_sqlPushEnabled ? Color.Tertiary : Color.Default)" Size="Size.Medium">
+                        <MudIcon Icon="@Icons.Material.Outlined.Storage" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6" Style="font-weight:700;">Step 3 — SQL Data Push</MudText>
+                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
+                        Push validated data to a SQL table with custom column mapping
+                    </MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudSwitch @bind-Value="_sqlPushEnabled"
+                               Color="Color.Primary"
+                               Label="@(_sqlPushEnabled ? "Enabled" : "Disabled")" />
+                </CardHeaderActions>
+            </MudCardHeader>
+
+            @if (_sqlPushEnabled)
+            {
+                <MudCardContent>
+                    <MudGrid Spacing="3">
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="_sqlTargetTable"
+                                          Label="Target SQL Table"
+                                          Placeholder="dbo.MyTable"
+                                          Variant="Variant.Outlined"
+                                          FullWidth="true"
+                                          Adornment="Adornment.Start"
+                                          AdornmentIcon="@Icons.Material.Outlined.TableChart" />
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <div class="d-flex align-center justify-space-between mb-2">
+                                <MudText Typo="Typo.subtitle2" Style="font-weight:600;">
+                                    Column Mapping
+                                </MudText>
+                                <MudButton Variant="Variant.Outlined"
+                                           Size="Size.Small"
+                                           Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Outlined.Add"
+                                           OnClick="AddColumnMapping">
+                                    Add Mapping
+                                </MudButton>
+                            </div>
+                            <MudText Typo="Typo.caption" Class="mb-3" Style="color:var(--mud-palette-text-secondary);">
+                                Map each CSV source column to its corresponding SQL target column.
+                            </MudText>
+
+                            @if (_columnMappings.Count == 0)
+                            {
+                                <MudAlert Severity="Severity.Info" Dense="true">
+                                    No column mappings defined. Click <strong>Add Mapping</strong> to begin.
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudPaper Elevation="0" Class="pa-2" Style="border: 1px solid var(--mud-palette-lines-default); border-radius:8px;">
+                                    <MudGrid Spacing="2">
+                                        <MudItem xs="5">
+                                            <MudText Typo="Typo.caption" Style="font-weight:700; color:var(--mud-palette-text-secondary);">SOURCE (CSV column)</MudText>
+                                        </MudItem>
+                                        <MudItem xs="5">
+                                            <MudText Typo="Typo.caption" Style="font-weight:700; color:var(--mud-palette-text-secondary);">TARGET (SQL column)</MudText>
+                                        </MudItem>
+                                        <MudItem xs="2"></MudItem>
+
+                                        @for (int i = 0; i < _columnMappings.Count; i++)
+                                        {
+                                            var idx = i;
+                                            <MudItem xs="5">
+                                                <MudTextField @bind-Value="_columnMappings[idx].Source"
+                                                              Placeholder="CSV column name"
+                                                              Variant="Variant.Outlined"
+                                                              Margin="Margin.Dense"
+                                                              FullWidth="true" />
+                                            </MudItem>
+                                            <MudItem xs="5">
+                                                <MudTextField @bind-Value="_columnMappings[idx].Target"
+                                                              Placeholder="SQL column name"
+                                                              Variant="Variant.Outlined"
+                                                              Margin="Margin.Dense"
+                                                              FullWidth="true" />
+                                            </MudItem>
+                                            <MudItem xs="2" Class="d-flex align-center">
+                                                <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                                               Size="Size.Small"
+                                                               Color="Color.Error"
+                                                               OnClick="@(() => RemoveColumnMapping(idx))" />
+                                            </MudItem>
+                                        }
+                                    </MudGrid>
+                                </MudPaper>
+                            }
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            }
+        </MudCard>
+    </div>
+
+    <!-- ── Save ──────────────────────────────────────────────────────────────── -->
+    <div class="d-flex justify-end align-center flex-wrap gap-4 mt-6">
+        @if (_savedAt is not null)
+        {
+            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-disabled);">
+                Last saved: @_savedAt
+            </MudText>
+        }
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Size="Size.Large"
+                   OnClick="HandleSave"
+                   Disabled="@_saving"
+                   StartIcon="@(_saved ? Icons.Material.Filled.Check : Icons.Material.Filled.Save)">
+            @if (_saving)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"
+                                     Color="Color.Inherit" />
+                <span class="ms-2">Saving…</span>
+            }
+            else if (_saved)
+            {
+                <span>Saved!</span>
+            }
+            else
+            {
+                <span>Save Agent Design</span>
+            }
+        </MudButton>
+    </div>
+}
+
+<style>
+    .agent-pipeline {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+    .pipeline-step {
+        border-radius: 12px !important;
+        transition: box-shadow 0.2s, border-color 0.2s;
+    }
+    .step-active {
+        border-left: 4px solid var(--mud-palette-primary) !important;
+    }
+    .step-inactive {
+        border-left: 4px solid var(--mud-palette-lines-default) !important;
+        opacity: 0.75;
+    }
+    .step-always-on {
+        border-left: 4px solid #ff9800 !important;
+    }
+    .pipeline-arrow {
+        display: flex;
+        justify-content: center;
+        padding: 6px 0;
+    }
+</style>
+
+@code {
+    // ── State ──────────────────────────────────────────────────────────────────
+
+    // Blob Input
+    private bool   _blobEnabled;
+    private string _blobReadEmailId         = "";
+    private bool   _blobReadEmailAppendDate;
+    private string _blobInputFilePattern    = "";
+    private bool   _blobInputAppendDate     = true;
+    private string _blobArchiveFilePattern  = "";
+    private bool   _blobArchiveAppendDate   = true;
+
+    // Email Notifications
+    private bool _notifyOnSuccess      = false;
+    private bool _notifyOnFileNotFound = true;
+    private bool _notifyOnDataIssue    = true;
+
+    // SQL Push
+    private bool   _sqlPushEnabled;
+    private string _sqlTargetTable = "";
+    private List<ColumnMapping> _columnMappings = new();
+
+    // Page state
+    private bool _loading = true;
+    private string? _loadError;
+    private bool _saving;
+    private bool _saved;
+    private string? _savedAt;
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var config = await ConfigService.GetConfigurationAsync();
+            if (config is not null)
+            {
+                _blobEnabled             = config.BlobEnabled;
+                _blobReadEmailId         = config.BlobReadEmailId ?? "";
+                _blobReadEmailAppendDate = config.BlobReadEmailAppendDate;
+                _blobInputFilePattern    = config.BlobInputFilePattern ?? "";
+                _blobInputAppendDate     = config.BlobInputAppendDate;
+                _blobArchiveFilePattern  = config.BlobArchiveFilePattern ?? "";
+                _blobArchiveAppendDate   = config.BlobArchiveAppendDate;
+
+                _notifyOnSuccess      = config.NotifyOnSuccess;
+                _notifyOnFileNotFound = config.NotifyOnFileNotFound;
+                _notifyOnDataIssue    = config.NotifyOnDataIssue;
+
+                _sqlPushEnabled = config.SqlPushEnabled;
+                _sqlTargetTable = config.SqlTargetTable ?? "";
+
+                if (!string.IsNullOrWhiteSpace(config.SqlColumnMappingJson))
+                {
+                    try
+                    {
+                        _columnMappings = JsonSerializer.Deserialize<List<ColumnMapping>>(
+                            config.SqlColumnMappingJson,
+                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                            ?? new();
+                    }
+                    catch
+                    {
+                        _columnMappings = new();
+                    }
+                }
+
+                if (config.UpdatedAt.HasValue)
+                    _savedAt = config.UpdatedAt.Value.ToLocalTime().ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
+    private static string PreviewEmail(string id, bool appendDate) =>
+        appendDate ? $"{id.TrimEnd('_')}_{DateTime.Today:yyyyMMdd}" : id;
+
+    private static string PreviewFileName(string pattern, bool appendDate) =>
+        appendDate
+            ? $"{pattern.TrimEnd('_')}_{DateTime.Today:yyyyMMdd}.csv"
+            : $"{pattern}.csv";
+
+    private void AddColumnMapping()    => _columnMappings.Add(new ColumnMapping());
+    private void RemoveColumnMapping(int index) => _columnMappings.RemoveAt(index);
+
+    // ── Save ───────────────────────────────────────────────────────────────────
+
+    private async Task HandleSave()
+    {
+        _saving = true;
+        _saved  = false;
+
+        try
+        {
+            var existing = await ConfigService.GetConfigurationAsync();
+
+            // Serialize column mappings — strip empty rows before saving
+            var cleanMappings = _columnMappings
+                .Where(m => !string.IsNullOrWhiteSpace(m.Source) || !string.IsNullOrWhiteSpace(m.Target))
+                .ToList();
+            var mappingJson = cleanMappings.Count > 0
+                ? JsonSerializer.Serialize(cleanMappings)
+                : null;
+
+            var request = new UpdateAppConfigurationRequest
+            {
+                // Preserve all existing Integration Settings fields (don't overwrite with blanks)
+                GraphTenantId        = existing?.GraphTenantId,
+                GraphClientId        = existing?.GraphClientId,
+                GraphScopes          = existing?.GraphScopes ?? "",
+                GraphMailboxAddress  = existing?.GraphMailboxAddress,
+                OpenAiEndpoint       = existing?.OpenAiEndpoint,
+                OpenAiDeploymentName = existing?.OpenAiDeploymentName,
+                BlobContainerName    = existing?.BlobContainerName ?? "",
+                NotificationEmail    = existing?.NotificationEmail ?? "",
+                BlobPollIntervalSeconds = existing?.BlobPollIntervalSeconds,
+                MaxRetryCount           = existing?.MaxRetryCount,
+                AgentFlowEnabled        = existing?.AgentFlowEnabled,
+
+                // Agent Designer fields
+                BlobEnabled             = _blobEnabled,
+                BlobReadEmailId         = _blobReadEmailId,
+                BlobReadEmailAppendDate = _blobReadEmailAppendDate,
+                BlobInputFilePattern    = _blobInputFilePattern,
+                BlobInputAppendDate     = _blobInputAppendDate,
+                BlobArchiveFilePattern  = _blobArchiveFilePattern,
+                BlobArchiveAppendDate   = _blobArchiveAppendDate,
+                NotifyOnSuccess         = _notifyOnSuccess,
+                NotifyOnFileNotFound    = _notifyOnFileNotFound,
+                NotifyOnDataIssue       = _notifyOnDataIssue,
+                SqlPushEnabled          = _sqlPushEnabled,
+                SqlTargetTable          = _sqlTargetTable,
+                SqlColumnMappingJson    = mappingJson,
+            };
+
+            var saved = await ConfigService.SaveConfigurationAsync(request);
+            if (saved?.UpdatedAt is not null)
+                _savedAt = saved.UpdatedAt.Value.ToLocalTime().ToString();
+
+            // Refresh column mappings from saved response
+            if (!string.IsNullOrWhiteSpace(saved?.SqlColumnMappingJson))
+            {
+                try
+                {
+                    _columnMappings = JsonSerializer.Deserialize<List<ColumnMapping>>(
+                        saved.SqlColumnMappingJson,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                        ?? new();
+                }
+                catch { /* keep existing */ }
+            }
+
+            _saved = true;
+            Snackbar.Add("Agent design saved!", Severity.Success);
+            await Task.Delay(3000);
+            _saved = false;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Save failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    // ── Models ─────────────────────────────────────────────────────────────────
+
+    private class ColumnMapping
+    {
+        public string Source { get; set; } = "";
+        public string Target { get; set; } = "";
+    }
+}

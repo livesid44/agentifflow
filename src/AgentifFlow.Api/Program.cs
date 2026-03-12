@@ -206,6 +206,34 @@ using (var scope = app.Services.CreateScope())
                 table: "BlobWatcherJobs", column: "NotificationRef", definition: "TEXT NULL");
             await EnsureSqliteColumnAsync(db, startupLogger,
                 table: "BlobWatcherJobs", column: "UserReply",       definition: "TEXT NULL");
+
+            // Agent Designer columns (added in 20260312200000_AddAgentDesignerFields)
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "BlobEnabled",             definition: "INTEGER NOT NULL DEFAULT 0");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "BlobReadEmailId",         definition: "TEXT NULL");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "BlobReadEmailAppendDate", definition: "INTEGER NOT NULL DEFAULT 0");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "BlobInputFilePattern",    definition: "TEXT NULL");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "BlobInputAppendDate",     definition: "INTEGER NOT NULL DEFAULT 1");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "BlobArchiveFilePattern",  definition: "TEXT NULL");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "BlobArchiveAppendDate",   definition: "INTEGER NOT NULL DEFAULT 1");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "NotifyOnSuccess",         definition: "INTEGER NOT NULL DEFAULT 0");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "NotifyOnFileNotFound",    definition: "INTEGER NOT NULL DEFAULT 1");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "NotifyOnDataIssue",       definition: "INTEGER NOT NULL DEFAULT 1");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "SqlPushEnabled",          definition: "INTEGER NOT NULL DEFAULT 0");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "SqlTargetTable",          definition: "TEXT NULL");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "SqlColumnMappingJson",    definition: "TEXT NULL");
         }
     }
     catch (Exception ex)
