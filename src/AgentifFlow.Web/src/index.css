@@ -298,3 +298,104 @@ body {
   .tab { padding: 10px 12px; font-size: 0.8rem; }
   .user-name { display: none; }
 }
+
+/* ── Navbar nav links ────────────────────────────────────────────────────── */
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  margin: 0 24px;
+}
+.navbar-link {
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.navbar-link:hover  { background: var(--surface-raised); color: var(--text-primary); }
+.navbar-link-active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+
+/* ── Dashboard stat cards ────────────────────────────────────────────────── */
+.dash-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.dash-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.dash-card-icon { font-size: 2rem; flex-shrink: 0; }
+.dash-card-label { font-size: 0.75rem; color: var(--text-hint); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.dash-card-value { font-size: 1.4rem; font-weight: 800; color: var(--text-primary); }
+
+/* ── Activity log table ──────────────────────────────────────────────────── */
+.activity-log-table {
+  overflow-x: auto;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.activity-log-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+.activity-log-table th {
+  background: var(--surface-raised);
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-secondary);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.activity-log-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.activity-log-table tr:last-child td { border-bottom: none; }
+.activity-log-table tr:hover td { background: var(--primary-light); }
+.log-ts     { font-family: monospace; font-size: 0.78rem; color: var(--text-hint); white-space: nowrap; }
+.log-event  { font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+.log-detail { color: var(--text-secondary); font-size: 0.81rem; }
+.log-badge  {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+/* ── App footer ──────────────────────────────────────────────────────────── */
+.app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 24px;
+  font-size: 0.78rem;
+  color: var(--text-hint);
+  border-top: 1px solid var(--border);
+  margin-top: 40px;
+}
+.app-footer strong { color: var(--text-secondary); font-weight: 700; }
+

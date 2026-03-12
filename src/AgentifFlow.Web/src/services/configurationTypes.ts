@@ -9,6 +9,10 @@ export interface AppConfigurationDto {
   blobStorageConnectionString: string | null;
   blobContainerName: string | null;
   sqlConnectionString: string | null;
+  agentFlowEnabled: boolean | null;
+  blobPollIntervalSeconds: number | null;
+  maxRetryCount: number | null;
+  notificationEmail: string | null;
   updatedAt: string | null;
   updatedBy: string | null;
 }
@@ -24,4 +28,8 @@ export interface UpdateAppConfigurationRequest {
   blobStorageConnectionString?: string;
   blobContainerName?: string;
   sqlConnectionString?: string;
+  agentFlowEnabled?: boolean;
+  blobPollIntervalSeconds?: number;
+  maxRetryCount?: number;
+  notificationEmail?: string;
 }

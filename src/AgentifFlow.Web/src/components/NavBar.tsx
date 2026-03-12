@@ -1,12 +1,20 @@
 import { useMsal } from "@azure/msal-react";
+import { useLocation, Link } from "react-router-dom";
 
 export default function NavBar() {
   const { instance, accounts } = useMsal();
   const account = accounts[0];
+  const { pathname } = useLocation();
 
   const handleLogout = () => {
     instance.logoutPopup({ mainWindowRedirectUri: "/" });
   };
+
+  const navLinks = [
+    { to: "/dashboard",            label: "Dashboard" },
+    { to: "/configuration",        label: "Integration Settings" },
+    { to: "/agent-configuration",  label: "Agent Configuration" },
+  ];
 
   return (
     <nav className="navbar">
@@ -20,6 +28,21 @@ export default function NavBar() {
         </svg>
         <span className="navbar-title">AgentifFlow</span>
       </div>
+
+      {account && (
+        <div className="navbar-links">
+          {navLinks.map(({ to, label }) => (
+            <Link
+              key={to}
+              to={to}
+              className={`navbar-link${pathname === to ? " navbar-link-active" : ""}`}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+      )}
+
       <div className="navbar-user">
         {account && (
           <>

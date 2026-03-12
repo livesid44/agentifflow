@@ -1,4 +1,3 @@
-@page "/"
 @page "/configuration"
 @attribute [Authorize]
 @inject IConfigurationApiService ConfigService
@@ -128,44 +127,6 @@ else
             </MudGrid>
         </MudTabPanel>
 
-        <!-- ── Agent Flow ───────────────────────────────────────────────────────────── -->
-        <MudTabPanel Text="Agent Flow" Icon="@Icons.Material.Outlined.SmartToy" Class="pa-6">
-            <MudGrid Spacing="3">
-                <MudItem xs="12">
-                    <MudSwitch @bind-Value="_agentFlowEnabled"
-                               Label="Enable Agent Flow"
-                               Color="Color.Primary" />
-                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
-                        When enabled the background worker polls Blob Storage and processes CSV files automatically.
-                    </MudText>
-                </MudItem>
-                <MudItem xs="12" sm="6">
-                    <MudNumericField @bind-Value="_pollInterval"
-                                     Label="Poll Interval (seconds)"
-                                     Placeholder="60"
-                                     Min="10" Max="3600"
-                                     HelperText="How often the background worker checks Blob Storage for new CSV files."
-                                     Variant="Variant.Outlined" FullWidth="true" />
-                </MudItem>
-                <MudItem xs="12" sm="6">
-                    <MudNumericField @bind-Value="_maxRetries"
-                                     Label="Max Retries"
-                                     Placeholder="3"
-                                     Min="0" Max="10"
-                                     HelperText="Maximum number of automatic retry attempts for failed SQL inserts."
-                                     Variant="Variant.Outlined" FullWidth="true" />
-                </MudItem>
-                <MudItem xs="12">
-                    <MudTextField @bind-Value="_notificationEmail"
-                                  Label="Notification Email"
-                                  InputType="InputType.Email"
-                                  Placeholder="alerts@contoso.com"
-                                  HelperText="Email address that receives CSV validation failure alerts."
-                                  Variant="Variant.Outlined" FullWidth="true" />
-                </MudItem>
-            </MudGrid>
-        </MudTabPanel>
-
     </MudTabs>
 
     <!-- ── Footer / Save ─────────────────────────────────────────────────────── -->
@@ -219,12 +180,6 @@ else
     // ── SQL ──────────────────────────────────────────────────────────────────
     private string _sqlConnStr = "";
 
-    // ── Agent Flow ────────────────────────────────────────────────────────────────
-    private bool   _agentFlowEnabled;
-    private int    _pollInterval = 60;
-    private int    _maxRetries = 3;
-    private string _notificationEmail = "";
-
     // ── UI state ─────────────────────────────────────────────────────────────
     private bool _loading = true;
     private string? _loadError;
@@ -249,10 +204,6 @@ else
                 _blobConnStr          = config.BlobStorageConnectionString ?? "";
                 _blobContainer        = config.BlobContainerName ?? "";
                 _sqlConnStr           = config.SqlConnectionString ?? "";
-                _notificationEmail = config.NotificationEmail ?? "";
-                _pollInterval      = config.BlobPollIntervalSeconds > 0 ? config.BlobPollIntervalSeconds : 60;
-                _maxRetries        = config.MaxRetryCount > 0 ? config.MaxRetryCount : 3;
-                _agentFlowEnabled  = config.AgentFlowEnabled;
                 if (config.UpdatedAt.HasValue)
                     _savedAt = config.UpdatedAt.Value.ToLocalTime().ToString();
             }
@@ -280,10 +231,6 @@ else
             OpenAiEndpoint       = _openAiEndpoint,
             OpenAiDeploymentName = _openAiDeploymentName,
             BlobContainerName    = _blobContainer,
-            NotificationEmail       = _notificationEmail,
-            BlobPollIntervalSeconds = _pollInterval,
-            MaxRetryCount           = _maxRetries,
-            AgentFlowEnabled        = _agentFlowEnabled,
         };
 
         // Only send secrets when the user actually typed something new

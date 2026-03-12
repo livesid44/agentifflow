@@ -279,3 +279,23 @@
     .lp-form-footer { padding: 14px 20px 20px; }
 }
 
+
+/* ── App footer ────────────────────────────────────────────────────────────── */
+.app-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 14px 24px;
+    font-size: 0.78rem;
+    color: rgba(0,0,0,0.42);
+    border-top: 1px solid rgba(0,0,0,0.08);
+    background: #fafafa;
+    margin-top: 32px;
+    font-family: 'Roboto', sans-serif;
+}
+
+.app-footer strong {
+    color: rgba(0,0,0,0.62);
+    font-weight: 700;
+}

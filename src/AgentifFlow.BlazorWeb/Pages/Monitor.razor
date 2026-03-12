@@ -1,3 +1,4 @@
+@page "/"
 @page "/monitor"
 @attribute [Authorize]
 @inject IBlobJobApiService JobService
@@ -5,13 +6,13 @@
 @inject NavigationManager Navigation
 @implements IDisposable
 
-<PageTitle>Monitor — AgentifFlow</PageTitle>
+<PageTitle>Dashboard — AgentifFlow</PageTitle>
 
 <MudText Typo="Typo.h5" Class="mb-1" Style="font-weight:700; letter-spacing:-0.5px;">
-    Agent Activity Monitor
+    Dashboard
 </MudText>
 <MudText Typo="Typo.body2" Class="mb-6" Style="color:var(--mud-palette-text-secondary);">
-    Live view of all CSV blob-processing jobs. Refreshes every 15 seconds.
+    Real-time view of all agent jobs and API activity. Refreshes every 15 seconds.
 </MudText>
 
 <!-- ── Summary cards ──────────────────────────────────────────────────────── -->
@@ -75,14 +76,15 @@ else if (_error is not null)
 else if (_jobs.Count == 0)
 {
     <MudAlert Severity="Severity.Info">
-        No jobs found. Enable Agent Flow in <MudLink Href="/configuration">Integration Settings</MudLink>
+        No jobs found. Enable Agent Flow in <MudLink Href="/agent-configuration">Agent Configuration</MudLink>
         and upload a CSV file to your configured Blob container.
     </MudAlert>
 }
 else
 {
+    <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight:700;">Agent Jobs</MudText>
     <MudTable Items="_jobs" Hover="true" Dense="true" Striped="true"
-              SortLabel="Sort By" Elevation="2">
+              SortLabel="Sort By" Elevation="2" Class="mb-8">
         <HeaderContent>
             <MudTh><MudTableSortLabel SortBy="new Func<BlobWatcherJobDto, object>(x => x.DetectedAt)">Detected</MudTableSortLabel></MudTh>
             <MudTh>Blob Name</MudTh>
@@ -121,6 +123,39 @@ else
             </MudTd>
         </RowTemplate>
     </MudTable>
+
+    <!-- ── Activity Log ───────────────────────────────────────────────────── -->
+    <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight:700;">Activity Log</MudText>
+    <MudPaper Elevation="2" Class="pa-0 rounded-lg" Style="overflow:hidden;">
+        <MudTable Items="_activityLog" Hover="true" Dense="true" Elevation="0"
+                  Style="max-height:380px; overflow-y:auto;">
+            <HeaderContent>
+                <MudTh Style="width:160px;">Timestamp</MudTh>
+                <MudTh Style="width:120px;">Source</MudTh>
+                <MudTh Style="width:130px;">Event</MudTh>
+                <MudTh>Details</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Timestamp">
+                    <MudText Typo="Typo.caption" Style="font-family:monospace;">
+                        @context.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Source">
+                    <MudChip T="string" Text="@context.Source" Size="Size.Small"
+                             Color="@SourceColor(context.Source)" />
+                </MudTd>
+                <MudTd DataLabel="Event">
+                    <MudText Typo="Typo.body2" Style="font-weight:600;">@context.Event</MudText>
+                </MudTd>
+                <MudTd DataLabel="Details">
+                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary); white-space:pre-wrap;">
+                        @context.Details
+                    </MudText>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
 }
 
 <!-- ── Log Detail Dialog ─────────────────────────────────────────────────── -->
@@ -151,6 +186,7 @@ else
 
 @code {
     private List<BlobWatcherJobDto> _jobs = [];
+    private List<ActivityLogEntry> _activityLog = [];
     private bool _loading;
     private string? _error;
     private DateTime? _lastRefresh;
@@ -181,9 +217,10 @@ else
         _error   = null;
         try
         {
-            _jobs         = await JobService.GetJobsAsync(100);
-            _lastRefresh  = DateTime.UtcNow;
+            _jobs        = await JobService.GetJobsAsync(100);
+            _lastRefresh = DateTime.UtcNow;
             ComputeSummary();
+            BuildActivityLog();
         }
         catch (Exception ex)
         {
@@ -201,6 +238,56 @@ else
         _inProgress       = _jobs.Count(j => j.Status is "Detected" or "Validating" or "Inserting" or "Retrying");
         _failed           = _jobs.Count(j => j.Status is "Failed" or "Rejected");
         _awaitingApproval = _jobs.Count(j => j.Status is "AwaitingApproval" or "ValidationFailed");
+    }
+
+    private void BuildActivityLog()
+    {
+        var entries = new List<ActivityLogEntry>();
+
+        foreach (var job in _jobs)
+        {
+            // Blob detected event
+            entries.Add(new ActivityLogEntry(
+                job.DetectedAt, "Blob Watcher", "Detected",
+                $"New blob: {job.BlobName}" + (job.ContainerName is not null ? $" (container: {job.ContainerName})" : "")));
+
+            // Status completion / failure event
+            if (job.Status is "Completed" or "Failed" or "Rejected")
+            {
+                var ts = job.CompletedAt ?? job.UpdatedAt;
+                var ev = job.Status == "Completed" ? "Completed" : "Failed";
+                var detail = job.Status == "Completed"
+                    ? $"Rows inserted: {job.RowsInserted?.ToString() ?? "—"}"
+                    : job.ErrorMessage ?? "See job log for details";
+                entries.Add(new ActivityLogEntry(ts, "Agent", ev, $"{job.BlobName} — {detail}"));
+            }
+
+            // API call log lines (lines starting with "API" or containing "Graph", "OpenAI", "SQL")
+            if (!string.IsNullOrWhiteSpace(job.LogDetails))
+            {
+                foreach (var line in job.LogDetails.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var trimmed = line.Trim();
+                    if (trimmed.Contains("API", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.Contains("Graph", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.Contains("OpenAI", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.Contains("SQL", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.Contains("LLM", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.Contains("Mail", StringComparison.OrdinalIgnoreCase))
+                    {
+                        entries.Add(new ActivityLogEntry(
+                            job.UpdatedAt, "API Call", "Log Entry", trimmed));
+                    }
+                }
+            }
+
+            // Retry events
+            if (job.RetryCount > 0)
+                entries.Add(new ActivityLogEntry(job.UpdatedAt, "Agent", "Retry",
+                    $"{job.BlobName} — retry #{job.RetryCount}"));
+        }
+
+        _activityLog = [.. entries.OrderByDescending(e => e.Timestamp)];
     }
 
     private void ShowLog(BlobWatcherJobDto job)
@@ -257,5 +344,15 @@ else
         builder.CloseComponent();
     };
 
+    private static Color SourceColor(string source) => source switch
+    {
+        "API Call"     => Color.Secondary,
+        "Blob Watcher" => Color.Info,
+        "Agent"        => Color.Primary,
+        _              => Color.Default,
+    };
+
     public void Dispose() => _refreshTimer?.Dispose();
+
+    private record ActivityLogEntry(DateTime Timestamp, string Source, string Event, string Details);
 }

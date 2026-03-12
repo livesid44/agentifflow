@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMsal } from "@azure/msal-react";
 import NavBar from "../components/NavBar";
+import Footer from "../components/Footer";
 import ConfigSection from "../components/ConfigSection";
 import FormField from "../components/FormField";
 import {
@@ -304,6 +305,7 @@ export default function ConfigurationPage() {
           </button>
         </div>
       </div>
+      <Footer />
     </>
   );
 }
