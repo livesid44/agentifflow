@@ -210,6 +210,106 @@ public class ConnectivityController : ControllerBase
         }
     }
 
+    // ── Email send test ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Validates the mail service end-to-end by actually sending a test email to
+    /// the configured <c>NotificationEmail</c> address.
+    ///
+    /// This is the definitive way to confirm that:
+    /// <list type="number">
+    ///   <item>The Tenant ID / Client ID / Client Secret combination is valid.</item>
+    ///   <item>The application has <c>Mail.Send</c> (and optionally <c>Mail.Read</c>) permission.</item>
+    ///   <item>The Mailbox Email / UPN is accessible by the application.</item>
+    ///   <item>The notification email address is reachable.</item>
+    /// </list>
+    /// </summary>
+    [HttpPost("mail")]
+    [ProducesResponseType(typeof(ConnectivityResult), StatusCodes.Status200OK)]
+    public async Task<IActionResult> TestMailSend(
+        [FromServices] IGraphMailService mailService)
+    {
+        var dto = await _configService.GetConfigurationAsync();
+
+        // ── Prerequisite checks ───────────────────────────────────────────────
+        if (string.IsNullOrWhiteSpace(dto.GraphTenantId) ||
+            string.IsNullOrWhiteSpace(dto.GraphClientId) ||
+            dto.GraphClientSecret == null || dto.GraphClientSecret.Length == 0)
+        {
+            return Ok(new ConnectivityResult
+            {
+                Success = false,
+                Message = "Graph API credentials are not configured. Please save Tenant ID, Client ID and Client Secret on the Integration Settings page first."
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.GraphMailboxAddress))
+        {
+            return Ok(new ConnectivityResult
+            {
+                Success = false,
+                Message = "Mailbox Email / UPN is not configured. Please enter the mailbox address the application will send as (e.g. inbox@contoso.com) on the Integration Settings page."
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.NotificationEmail))
+        {
+            return Ok(new ConnectivityResult
+            {
+                Success = false,
+                Message = "Notification Email is not configured. Please enter the recipient address on the Agent Configuration page."
+            });
+        }
+
+        // ── Attempt to send ───────────────────────────────────────────────────
+        try
+        {
+            var testRef = "AGNT-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+            await mailService.SendEmailAsync(new Models.SendEmailRequest
+            {
+                To      = dto.NotificationEmail,
+                Subject = $"[AgentifFlow] Mail Delivery Test [Ref: {testRef}]",
+                Body    =
+                    $"This is an automated delivery test from AgentifFlow.\n\n" +
+                    $"If you receive this message, the mail service is working correctly.\n\n" +
+                    $"Sent from mailbox: {dto.GraphMailboxAddress}\n" +
+                    $"Sent to:          {dto.NotificationEmail}\n" +
+                    $"Reference:        {testRef}\n" +
+                    $"Timestamp (UTC):  {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}",
+                IsHtml  = false
+            });
+
+            return Ok(new ConnectivityResult
+            {
+                Success = true,
+                Message =
+                    $"Test email successfully submitted to Graph API.\n" +
+                    $"Sent from: {dto.GraphMailboxAddress}\n" +
+                    $"Sent to:   {dto.NotificationEmail}\n" +
+                    $"Reference: {testRef}\n\n" +
+                    "Please check your inbox (and spam folder). " +
+                    "If the email does not arrive within a few minutes, verify that the " +
+                    "application has Mail.Send and Mail.ReadWrite permissions consented in " +
+                    "Azure AD, and that the Mailbox Address matches a real mailbox."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Mail test send failed");
+            return Ok(new ConnectivityResult
+            {
+                Success = false,
+                Message =
+                    $"Mail send failed: {ex.Message}\n\n" +
+                    "Common causes:\n" +
+                    "  • Mail.Send or Mail.ReadWrite application permission not granted / consented in Azure AD\n" +
+                    "  • Mailbox Email / UPN does not match a real mailbox in this tenant\n" +
+                    "  • Client Secret has expired or is incorrect\n" +
+                    "  • Tenant ID / Client ID mismatch"
+            });
+        }
+    }
+
     // ── SQL Database ──────────────────────────────────────────────────────────
 
     /// <summary>

@@ -64,11 +64,14 @@ else
                     <MudTextField @bind-Value="_graphMailboxAddress"
                                   Label="Mailbox Email / User Principal Name"
                                   Placeholder="inbox@contoso.com"
-                                  HelperText="Email address or UPN of the mailbox to read from and send as. Required when using application (client-credentials) permissions."
+                                  HelperText="Email address or UPN of the mailbox to read from and send as. Required when using application (client-credentials) permissions. Also used as the sender address for all agent notifications."
                                   Variant="Variant.Outlined" FullWidth="true" />
                 </MudItem>
                 <MudItem xs="12">
                     @RenderTestButton("graph", "Test Graph API Connection")
+                </MudItem>
+                <MudItem xs="12">
+                    @RenderTestButton("mail", "Test Mail Send")
                 </MudItem>
             </MudGrid>
         </MudTabPanel>
