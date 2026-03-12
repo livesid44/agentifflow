@@ -69,30 +69,29 @@
     grid-template-columns: 60fr 40fr;
 }
 
-/* ── Left: dark AI visual panel ────────────────────────────────────────────── */
+/* ── Left: hero image panel ────────────────────────────────────────────────── */
 .login-hero-panel {
-    background: #0D0A0C;
     position: relative;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 100vh;
+    background: #0D0A0C;
+}
+
+.login-hero-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
 }
 
 .login-hero-panel::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background:
-        radial-gradient(ellipse at 100% 100%, rgba(227,25,55,0.38) 0%, transparent 55%),
-        radial-gradient(ellipse at 0%   90%,  rgba(160,10,50,0.22)  0%, transparent 45%),
-        radial-gradient(ellipse at 50%  50%,  rgba(80,10,30,0.32)   0%, transparent 70%);
-    z-index: 0;
-    pointer-events: none;
+    display: none;
 }
-
-.login-hero-panel > * { position: relative; z-index: 1; }
 
 /* ── Right: dark form panel ─────────────────────────────────────────────────── */
 .login-form-panel-dark {
