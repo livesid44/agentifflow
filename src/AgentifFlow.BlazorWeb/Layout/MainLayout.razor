@@ -2,26 +2,34 @@
 
 <MudLayout>
     <MudAppBar Elevation="1" Color="Color.Primary">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit"
-                       Edge="Edge.Start" OnClick="ToggleDrawer" />
+        <AuthorizeView>
+            <Authorized>
+                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit"
+                               Edge="Edge.Start" OnClick="ToggleDrawer" />
+            </Authorized>
+        </AuthorizeView>
         <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Inherit" Class="mr-2" />
         <MudText Typo="Typo.h6" Style="font-weight:700;letter-spacing:-0.3px;">AgentifFlow</MudText>
         <MudSpacer />
         <LoginDisplay />
     </MudAppBar>
 
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always">
-        <MudNavMenu>
-            <MudNavLink Href="/configuration" Match="NavLinkMatch.All"
-                        Icon="@Icons.Material.Outlined.Settings">
-                Integration Settings
-            </MudNavLink>
-            <MudNavLink Href="/monitor" Match="NavLinkMatch.All"
-                        Icon="@Icons.Material.Outlined.Dashboard">
-                Monitor
-            </MudNavLink>
-        </MudNavMenu>
-    </MudDrawer>
+    <AuthorizeView>
+        <Authorized>
+            <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always">
+                <MudNavMenu>
+                    <MudNavLink Href="/configuration" Match="NavLinkMatch.All"
+                                Icon="@Icons.Material.Outlined.Settings">
+                        Integration Settings
+                    </MudNavLink>
+                    <MudNavLink Href="/monitor" Match="NavLinkMatch.All"
+                                Icon="@Icons.Material.Outlined.Dashboard">
+                        Monitor
+                    </MudNavLink>
+                </MudNavMenu>
+            </MudDrawer>
+        </Authorized>
+    </AuthorizeView>
 
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.Large" Class="py-8">

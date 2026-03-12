@@ -25,12 +25,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-// ── Azure AD / OAuth2.0 authentication ──────────────────────────────────────
-builder.Services.AddMicrosoftIdentityWebApiAuthentication(builder.Configuration)
-    .EnableTokenAcquisitionToCallDownstreamApi()
-    .AddMicrosoftGraph(builder.Configuration.GetSection("Graph"))
-    .AddInMemoryTokenCaches();
-
 // ── Dev local auth (development-only username/password JWT) ──────────────────
 // The LocalAuthService is always registered; it is a no-op when DevAuth:Enabled = false.
 builder.Services.AddSingleton<ILocalAuthService, LocalAuthService>();
@@ -38,32 +32,44 @@ builder.Services.AddSingleton<ILocalAuthService, LocalAuthService>();
 var devAuthEnabled = builder.Configuration.GetValue<bool>("DevAuth:Enabled");
 if (devAuthEnabled)
 {
+    // ── Dev mode: skip Azure AD entirely to avoid OIDC discovery errors ──────
+    // The DevLocal JWT is registered as the sole "Bearer" scheme.  No network
+    // call is needed to validate these tokens, so requests are fast and silent.
     var devJwtKey = builder.Configuration["DevAuth:JwtSigningKey"]
         ?? throw new InvalidOperationException(
             "DevAuth:JwtSigningKey must be configured when DevAuth:Enabled is true.");
 
-    // Add a second JWT bearer scheme that validates locally-issued dev tokens.
-    builder.Services.AddAuthentication()
-        .AddJwtBearer("DevLocal", options =>
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
         {
             options.TokenValidationParameters = new TokenValidationParameters
             {
-                ValidIssuer            = "agentifflow-dev",
-                ValidAudience          = "agentifflow-api",
-                IssuerSigningKey       = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(devJwtKey)),
-                ValidateLifetime       = true,
-                ClockSkew              = TimeSpan.FromSeconds(30),
+                ValidIssuer      = "agentifflow-dev",
+                ValidAudience    = "agentifflow-api",
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(devJwtKey)),
+                ValidateLifetime = true,
+                ClockSkew        = TimeSpan.FromSeconds(30),
             };
         });
 
-    // Update the default policy to accept tokens from either Azure AD or DevLocal.
-    builder.Services.AddAuthorization(options =>
-    {
-        options.DefaultPolicy = new AuthorizationPolicyBuilder(
-                JwtBearerDefaults.AuthenticationScheme, "DevLocal")
-            .RequireAuthenticatedUser()
-            .Build();
-    });
+    builder.Services.AddAuthorization();
+
+    // Register a stub GraphServiceClient so DI resolves correctly in dev mode.
+    // Real Graph calls (email send/read) will return 401 without real credentials —
+    // that is expected and handled gracefully by the services that use it.
+    builder.Services.AddScoped<Microsoft.Graph.GraphServiceClient>(_ =>
+        new Microsoft.Graph.GraphServiceClient(
+            new Microsoft.Kiota.Abstractions.Authentication.AnonymousAuthenticationProvider()));
+}
+else
+{
+    // ── Production mode: full Azure AD / Microsoft Identity auth ─────────────
+    builder.Services.AddMicrosoftIdentityWebApiAuthentication(builder.Configuration)
+        .EnableTokenAcquisitionToCallDownstreamApi()
+        .AddMicrosoftGraph(builder.Configuration.GetSection("Graph"))
+        .AddInMemoryTokenCaches();
+
+    builder.Services.AddAuthorization();
 }
 
 // ── SQL Server / EF Core ─────────────────────────────────────────────────────
@@ -162,18 +168,20 @@ builder.Services.AddSwaggerGen(options =>
 var app = builder.Build();
 
 // ── Auto-migrate database on startup ────────────────────────────────────────
+// MigrateAsync applies any pending migrations, creating or updating the schema
+// for both new installs (fresh DB) and existing installs (old schema).
 using (var scope = app.Services.CreateScope())
 {
     try
     {
         var db = scope.ServiceProvider.GetRequiredService<AgentifFlowDbContext>();
-        db.Database.EnsureCreated();
+        await db.Database.MigrateAsync();
     }
     catch (Exception ex)
     {
         var startupLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         startupLogger.LogWarning(ex,
-            "Database initialisation failed — the app will start but database-dependent " +
+            "Database migration failed — the app will start but database-dependent " +
             "features will be unavailable until the connection is configured.");
     }
 }
