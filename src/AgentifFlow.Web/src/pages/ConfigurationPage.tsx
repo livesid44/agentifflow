@@ -23,6 +23,7 @@ export default function ConfigurationPage() {
   const [graphClientId, setGraphClientId] = useState("");
   const [graphClientSecret, setGraphClientSecret] = useState("");
   const [graphScopes, setGraphScopes] = useState("Mail.Read Mail.Send Mail.ReadWrite");
+  const [graphMailboxAddress, setGraphMailboxAddress] = useState("");
 
   // ── Azure OpenAI ─────────────────────────────────────────────────────────
   const [openAiEndpoint, setOpenAiEndpoint] = useState("");
@@ -54,6 +55,7 @@ export default function ConfigurationPage() {
         setGraphClientId(config.graphClientId ?? "");
         setGraphClientSecret(config.graphClientSecret ?? "");
         setGraphScopes(config.graphScopes ?? "Mail.Read Mail.Send Mail.ReadWrite");
+        setGraphMailboxAddress(config.graphMailboxAddress ?? "");
         setOpenAiEndpoint(config.openAiEndpoint ?? "");
         setOpenAiApiKey(config.openAiApiKey ?? "");
         setOpenAiDeploymentName(config.openAiDeploymentName ?? "gpt-4o");
@@ -77,6 +79,7 @@ export default function ConfigurationPage() {
       graphTenantId,
       graphClientId,
       graphScopes,
+      graphMailboxAddress,
       openAiEndpoint,
       openAiDeploymentName,
       blobContainerName: blobContainer,
@@ -195,6 +198,14 @@ export default function ConfigurationPage() {
               onChange={setGraphScopes}
               placeholder="Mail.Read Mail.Send Mail.ReadWrite"
               hint="Space-separated Microsoft Graph permission scopes."
+            />
+            <FormField
+              id="graphMailboxAddress"
+              label="Mailbox Email / User Principal Name"
+              value={graphMailboxAddress}
+              onChange={setGraphMailboxAddress}
+              placeholder="inbox@contoso.com"
+              hint="Email address or UPN of the mailbox to read from and send as. Required when using application (client-credentials) permissions."
             />
           </ConfigSection>
         )}

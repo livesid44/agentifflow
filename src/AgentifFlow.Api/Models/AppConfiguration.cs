@@ -21,6 +21,14 @@ public class AppConfiguration
     [MaxLength(500)]
     public string? GraphScopes { get; set; }
 
+    /// <summary>
+    /// UPN or email address of the mailbox to read from / send as when using
+    /// application-level credentials (client credentials flow).
+    /// e.g. "inbox@contoso.com" or a user's GUID / UPN.
+    /// </summary>
+    [MaxLength(300)]
+    public string? GraphMailboxAddress { get; set; }
+
     // ── Azure OpenAI ─────────────────────────────────────────────────────────
     [MaxLength(500)]
     public string? OpenAiEndpoint { get; set; }
@@ -65,6 +73,7 @@ public class AppConfigurationDto
     public string? GraphClientId { get; set; }
     public string? GraphClientSecret { get; set; }
     public string? GraphScopes { get; set; }
+    public string? GraphMailboxAddress { get; set; }
     public string? OpenAiEndpoint { get; set; }
     public string? OpenAiApiKey { get; set; }
     public string? OpenAiDeploymentName { get; set; }
@@ -93,6 +102,9 @@ public class UpdateAppConfigurationRequest
 
     [MaxLength(500)]
     public string? GraphScopes { get; set; }
+
+    [MaxLength(300)]
+    public string? GraphMailboxAddress { get; set; }
 
     [MaxLength(500)]
     public string? OpenAiEndpoint { get; set; }

@@ -38,6 +38,7 @@ public class AppConfigurationService : IAppConfigurationService
         if (request.GraphClientId is not null) config.GraphClientId = request.GraphClientId;
         if (request.GraphClientSecret is not null) config.GraphClientSecret = request.GraphClientSecret;
         if (request.GraphScopes is not null) config.GraphScopes = request.GraphScopes;
+        if (request.GraphMailboxAddress is not null) config.GraphMailboxAddress = request.GraphMailboxAddress;
         if (request.OpenAiEndpoint is not null) config.OpenAiEndpoint = request.OpenAiEndpoint;
         if (request.OpenAiApiKey is not null) config.OpenAiApiKey = request.OpenAiApiKey;
         if (request.OpenAiDeploymentName is not null) config.OpenAiDeploymentName = request.OpenAiDeploymentName;
@@ -65,12 +66,19 @@ public class AppConfigurationService : IAppConfigurationService
         return (config?.OpenAiEndpoint, config?.OpenAiApiKey, config?.OpenAiDeploymentName);
     }
 
+    public async Task<(string? TenantId, string? ClientId, string? ClientSecret, string? MailboxAddress)> GetGraphRawSettingsAsync()
+    {
+        var config = await _db.AppConfigurations.FirstOrDefaultAsync();
+        return (config?.GraphTenantId, config?.GraphClientId, config?.GraphClientSecret, config?.GraphMailboxAddress);
+    }
+
     private static AppConfigurationDto ToDto(AppConfiguration config) => new()
     {
         GraphTenantId = config.GraphTenantId,
         GraphClientId = config.GraphClientId,
         GraphClientSecret = Mask(config.GraphClientSecret),
         GraphScopes = config.GraphScopes,
+        GraphMailboxAddress = config.GraphMailboxAddress,
         OpenAiEndpoint = config.OpenAiEndpoint,
         OpenAiApiKey = Mask(config.OpenAiApiKey),
         OpenAiDeploymentName = config.OpenAiDeploymentName,

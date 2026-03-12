@@ -60,6 +60,13 @@ else
                                   HelperText="Space-separated Microsoft Graph permission scopes."
                                   Variant="Variant.Outlined" FullWidth="true" />
                 </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_graphMailboxAddress"
+                                  Label="Mailbox Email / User Principal Name"
+                                  Placeholder="inbox@contoso.com"
+                                  HelperText="Email address or UPN of the mailbox to read from and send as. Required when using application (client-credentials) permissions."
+                                  Variant="Variant.Outlined" FullWidth="true" />
+                </MudItem>
             </MudGrid>
         </MudTabPanel>
 
@@ -167,6 +174,7 @@ else
     private string _graphClientId = "";
     private string _graphClientSecret = "";
     private string _graphScopes = "Mail.Read Mail.Send Mail.ReadWrite";
+    private string _graphMailboxAddress = "";
 
     // ── Azure OpenAI ─────────────────────────────────────────────────────────
     private string _openAiEndpoint = "";
@@ -198,6 +206,7 @@ else
                 _graphClientId        = config.GraphClientId ?? "";
                 _graphClientSecret    = config.GraphClientSecret ?? "";
                 _graphScopes          = config.GraphScopes ?? "Mail.Read Mail.Send Mail.ReadWrite";
+                _graphMailboxAddress  = config.GraphMailboxAddress ?? "";
                 _openAiEndpoint       = config.OpenAiEndpoint ?? "";
                 _openAiApiKey         = config.OpenAiApiKey ?? "";
                 _openAiDeploymentName = config.OpenAiDeploymentName ?? "gpt-4o";
@@ -228,6 +237,7 @@ else
             GraphTenantId        = _graphTenantId,
             GraphClientId        = _graphClientId,
             GraphScopes          = _graphScopes,
+            GraphMailboxAddress  = _graphMailboxAddress,
             OpenAiEndpoint       = _openAiEndpoint,
             OpenAiDeploymentName = _openAiDeploymentName,
             BlobContainerName    = _blobContainer,

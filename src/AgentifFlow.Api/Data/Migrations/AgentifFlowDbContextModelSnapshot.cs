@@ -96,6 +96,10 @@ namespace AgentifFlow.Api.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("GraphMailboxAddress")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
                     b.Property<string>("GraphScopes")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");

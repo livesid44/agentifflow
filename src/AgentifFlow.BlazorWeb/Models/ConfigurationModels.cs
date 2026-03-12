@@ -7,6 +7,7 @@ public class AppConfigurationDto
     public string? GraphClientId { get; set; }
     public string? GraphClientSecret { get; set; }
     public string? GraphScopes { get; set; }
+    public string? GraphMailboxAddress { get; set; }
     public string? OpenAiEndpoint { get; set; }
     public string? OpenAiApiKey { get; set; }
     public string? OpenAiDeploymentName { get; set; }
@@ -28,6 +29,7 @@ public class UpdateAppConfigurationRequest
     public string? GraphClientId { get; set; }
     public string? GraphClientSecret { get; set; }
     public string? GraphScopes { get; set; }
+    public string? GraphMailboxAddress { get; set; }
     public string? OpenAiEndpoint { get; set; }
     public string? OpenAiApiKey { get; set; }
     public string? OpenAiDeploymentName { get; set; }

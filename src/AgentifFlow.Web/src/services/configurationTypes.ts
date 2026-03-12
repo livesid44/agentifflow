@@ -3,6 +3,7 @@ export interface AppConfigurationDto {
   graphClientId: string | null;
   graphClientSecret: string | null;
   graphScopes: string | null;
+  graphMailboxAddress: string | null;
   openAiEndpoint: string | null;
   openAiApiKey: string | null;
   openAiDeploymentName: string | null;
@@ -22,6 +23,7 @@ export interface UpdateAppConfigurationRequest {
   graphClientId?: string;
   graphClientSecret?: string;
   graphScopes?: string;
+  graphMailboxAddress?: string;
   openAiEndpoint?: string;
   openAiApiKey?: string;
   openAiDeploymentName?: string;

@@ -13,4 +13,11 @@ public interface IAppConfigurationService
     /// These values are never returned to the browser.
     /// </summary>
     Task<(string? Endpoint, string? ApiKey, string? DeploymentName)> GetOpenAiRawSettingsAsync();
+
+    /// <summary>
+    /// Returns the raw (unmasked) Microsoft Graph settings stored in the database,
+    /// including the mailbox address/UPN required for application-level mail access.
+    /// These values are never returned to the browser.
+    /// </summary>
+    Task<(string? TenantId, string? ClientId, string? ClientSecret, string? MailboxAddress)> GetGraphRawSettingsAsync();
 }
