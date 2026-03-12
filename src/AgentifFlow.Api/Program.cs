@@ -174,8 +174,13 @@ if (app.Environment.IsDevelopment())
         options.OAuthUsePkce();
     });
 }
-
-app.UseHttpsRedirection();
+else
+{
+    // Only redirect to HTTPS in non-development environments.
+    // In Development the API also listens on HTTP (port 5045) so the Blazor dev
+    // client can reach it without a dev-cert trust requirement.
+    app.UseHttpsRedirection();
+}
 app.UseCors(frontendOrigins);
 app.UseAuthentication();
 app.UseAuthorization();
