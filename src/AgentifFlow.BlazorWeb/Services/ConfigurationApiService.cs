@@ -30,4 +30,23 @@ public class ConfigurationApiService : IConfigurationApiService
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<ConnectivityResult>();
     }
+
+    public async Task<ConnectivityResult?> TestMailConnectivityAsync(string toEmail)
+    {
+        // When the caller provides no address, fall back to the parameterless endpoint so
+        // the API can apply its own fallback to the saved NotificationEmail.
+        string url;
+        if (string.IsNullOrWhiteSpace(toEmail))
+        {
+            url = "api/connectivity/mail";
+        }
+        else
+        {
+            url = $"api/connectivity/mail?to={Uri.EscapeDataString(toEmail.Trim())}";
+        }
+
+        var response = await _http.PostAsync(url, null);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ConnectivityResult>();
+    }
 }

@@ -118,7 +118,7 @@ public class GraphMailService : IGraphMailService
                 Content = request.Body
             },
             ToRecipients = recipients,
-            CcRecipients = ccRecipients.Count > 0 ? ccRecipients : null
+            CcRecipients = ccRecipients
         };
 
         var (client, mailbox) = await GetClientAndMailboxAsync();

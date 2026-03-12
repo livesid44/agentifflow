@@ -213,21 +213,25 @@ public class ConnectivityController : ControllerBase
     // ── Email send test ───────────────────────────────────────────────────────
 
     /// <summary>
-    /// Validates the mail service end-to-end by actually sending a test email to
-    /// the configured <c>NotificationEmail</c> address.
+    /// Validates the mail service end-to-end by actually sending a test email.
+    ///
+    /// Supply <paramref name="to"/> in the query string to override the recipient;
+    /// when omitted the configured <c>NotificationEmail</c> address is used.
     ///
     /// This is the definitive way to confirm that:
     /// <list type="number">
     ///   <item>The Tenant ID / Client ID / Client Secret combination is valid.</item>
     ///   <item>The application has <c>Mail.Send</c> (and optionally <c>Mail.Read</c>) permission.</item>
     ///   <item>The Mailbox Email / UPN is accessible by the application.</item>
-    ///   <item>The notification email address is reachable.</item>
+    ///   <item>The recipient address is reachable.</item>
     /// </list>
     /// </summary>
+    /// <param name="to">Optional override for the test recipient email address.</param>
     [HttpPost("mail")]
     [ProducesResponseType(typeof(ConnectivityResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> TestMailSend(
-        [FromServices] IGraphMailService mailService)
+        [FromServices] IGraphMailService mailService,
+        [FromQuery]    string?           to = null)
     {
         var dto = await _configService.GetConfigurationAsync();
 
@@ -252,12 +256,15 @@ public class ConnectivityController : ControllerBase
             });
         }
 
-        if (string.IsNullOrWhiteSpace(dto.NotificationEmail))
+        // Resolve recipient: prefer the caller-supplied address, fall back to saved NotificationEmail.
+        var recipient = string.IsNullOrWhiteSpace(to) ? dto.NotificationEmail : to.Trim();
+
+        if (string.IsNullOrWhiteSpace(recipient))
         {
             return Ok(new ConnectivityResult
             {
                 Success = false,
-                Message = "Notification Email is not configured. Please enter the recipient address on the Agent Configuration page."
+                Message = "No recipient address supplied. Enter a test email address in the 'Test recipient email' field (or save a Notification Email on the Agent Configuration page)."
             });
         }
 
@@ -267,13 +274,13 @@ public class ConnectivityController : ControllerBase
             var testRef = "AGNT-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
             await mailService.SendEmailAsync(new Models.SendEmailRequest
             {
-                To      = dto.NotificationEmail,
+                To      = recipient,
                 Subject = $"[AgentifFlow] Mail Delivery Test [Ref: {testRef}]",
                 Body    =
                     $"This is an automated delivery test from AgentifFlow.\n\n" +
                     $"If you receive this message, the mail service is working correctly.\n\n" +
                     $"Sent from mailbox: {dto.GraphMailboxAddress}\n" +
-                    $"Sent to:          {dto.NotificationEmail}\n" +
+                    $"Sent to:          {recipient}\n" +
                     $"Reference:        {testRef}\n" +
                     $"Timestamp (UTC):  {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}",
                 IsHtml  = false
@@ -285,7 +292,7 @@ public class ConnectivityController : ControllerBase
                 Message =
                     $"Test email successfully submitted to Graph API.\n" +
                     $"Sent from: {dto.GraphMailboxAddress}\n" +
-                    $"Sent to:   {dto.NotificationEmail}\n" +
+                    $"Sent to:   {recipient}\n" +
                     $"Reference: {testRef}\n\n" +
                     "Please check your inbox (and spam folder). " +
                     "If the email does not arrive within a few minutes, verify that the " +

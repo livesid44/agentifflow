@@ -71,7 +71,43 @@ else
                     @RenderTestButton("graph", "Test Graph API Connection")
                 </MudItem>
                 <MudItem xs="12">
-                    @RenderTestButton("mail", "Test Mail Send")
+                    <div class="d-flex flex-column gap-2">
+                        <MudTextField @bind-Value="_testMailTo"
+                                      Label="Test recipient email"
+                                      Placeholder="you@example.com"
+                                      HelperText="Address to send the test email to. Defaults to the saved Notification Email if left blank."
+                                      Variant="Variant.Outlined"
+                                      FullWidth="true"
+                                      InputType="InputType.Email" />
+                        @{
+                            var isTesting = _testing.TryGetValue("mail", out var t) && t;
+                            var hasResult = _testResults.TryGetValue("mail", out var result);
+                        }
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Secondary"
+                                   Size="Size.Medium"
+                                   OnClick="HandleTestMailSend"
+                                   Disabled="@isTesting"
+                                   StartIcon="@(isTesting ? null : Icons.Material.Outlined.MarkEmailRead)">
+                            @if (isTesting)
+                            {
+                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"
+                                                     Color="Color.Inherit" />
+                                <span class="ms-2">Sending…</span>
+                            }
+                            else
+                            {
+                                <span>Test Mail Send</span>
+                            }
+                        </MudButton>
+                        @if (hasResult)
+                        {
+                            <MudAlert Severity="@(result.Success ? Severity.Success : Severity.Error)"
+                                      Dense="true" Class="mt-1" Style="white-space: pre-line;">
+                                @result.Message
+                            </MudAlert>
+                        }
+                    </div>
                 </MudItem>
             </MudGrid>
         </MudTabPanel>
@@ -213,6 +249,7 @@ else
     // ── Connectivity test state (keyed by service name) ───────────────────────
     private readonly Dictionary<string, bool> _testing = new();
     private readonly Dictionary<string, (bool Success, string Message)> _testResults = new();
+    private string _testMailTo = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -306,6 +343,28 @@ else
         finally
         {
             _testing[service] = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleTestMailSend()
+    {
+        _testing["mail"] = true;
+        _testResults.Remove("mail");
+        StateHasChanged();
+
+        try
+        {
+            var result = await ConfigService.TestMailConnectivityAsync(_testMailTo);
+            _testResults["mail"] = (result?.Success ?? false, result?.Message ?? "No response from server.");
+        }
+        catch (Exception ex)
+        {
+            _testResults["mail"] = (false, $"Request failed: {ex.Message}");
+        }
+        finally
+        {
+            _testing["mail"] = false;
             StateHasChanged();
         }
     }
