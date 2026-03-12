@@ -1,33 +1,62 @@
 @inherits LayoutComponentBase
 
 <MudLayout>
-    <MudAppBar Elevation="1" Color="Color.Primary">
+    <!-- ── TechM Orion–style top app bar ─────────────────────────────────── -->
+    <MudAppBar Elevation="2" Color="Color.Dark"
+               Style="background:#213e55 !important; border-bottom:1px solid rgba(255,255,255,0.10);">
         <AuthorizeView>
             <Authorized>
                 <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit"
                                Edge="Edge.Start" OnClick="ToggleDrawer" />
             </Authorized>
         </AuthorizeView>
-        <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Inherit" Class="mr-2" />
-        <MudText Typo="Typo.h6" Style="font-weight:700;letter-spacing:-0.3px;">AgentifFlow</MudText>
+
+        <!-- Logo: red mark + wordmark + divider + "Orion Marketplace" -->
+        <div style="display:flex;align-items:center;gap:10px;">
+            <svg width="28" height="28" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+                <rect width="36" height="36" rx="6" fill="#E31937"/>
+                <path d="M9 27 L18 8 L27 27" stroke="white" stroke-width="2.5"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="18" cy="21" r="3.5" fill="white"/>
+            </svg>
+            <span style="font-size:1rem;font-weight:800;color:#fff;letter-spacing:-0.3px;line-height:1;">
+                AgentifFlow
+            </span>
+            <span style="width:1px;height:22px;background:rgba(255,255,255,0.25);margin:0 6px;"></span>
+            <span style="font-size:0.72rem;color:rgba(255,255,255,0.55);font-weight:400;letter-spacing:0.5px;">
+                Tech M Orion Marketplace
+            </span>
+        </div>
+
         <MudSpacer />
         <LoginDisplay />
     </MudAppBar>
 
+    <!-- ── Sidebar (TechM teal — matches header) ─────────────────────────── -->
     <AuthorizeView>
         <Authorized>
-            <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always">
-                <MudNavMenu>
+            <MudDrawer @bind-Open="_drawerOpen" Elevation="0" ClipMode="DrawerClipMode.Always"
+                       Style="background:#213e55; border-right:1px solid rgba(255,255,255,0.10);">
+                <!-- Drawer header / brand repeat -->
+                <div style="padding:20px 16px 8px; border-bottom:1px solid rgba(255,255,255,0.08); margin-bottom:8px;">
+                    <span style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.4);letter-spacing:1.5px;text-transform:uppercase;">
+                        Navigation
+                    </span>
+                </div>
+                <MudNavMenu Style="padding:0 8px;">
                     <MudNavLink Href="/" Match="NavLinkMatch.All"
-                                Icon="@Icons.Material.Outlined.Dashboard">
+                                Icon="@Icons.Material.Outlined.Dashboard"
+                                Style="border-radius:20px;margin-bottom:4px;color:rgba(255,255,255,0.85);">
                         Dashboard
                     </MudNavLink>
                     <MudNavLink Href="/configuration" Match="NavLinkMatch.All"
-                                Icon="@Icons.Material.Outlined.Settings">
+                                Icon="@Icons.Material.Outlined.Settings"
+                                Style="border-radius:20px;margin-bottom:4px;color:rgba(255,255,255,0.85);">
                         Integration Settings
                     </MudNavLink>
                     <MudNavLink Href="/agent-configuration" Match="NavLinkMatch.All"
-                                Icon="@Icons.Material.Outlined.SmartToy">
+                                Icon="@Icons.Material.Outlined.SmartToy"
+                                Style="border-radius:20px;margin-bottom:4px;color:rgba(255,255,255,0.85);">
                         Agent Configuration
                     </MudNavLink>
                 </MudNavMenu>
@@ -40,16 +69,21 @@
             @Body
         </MudContainer>
 
-        <!-- ── Footer ────────────────────────────────────────────────────────── -->
+        <!-- ── Footer (TechM dark) ─────────────────────────────────────────── -->
         <footer class="app-footer">
-            <span>Powered by</span>
-            <svg width="18" height="18" viewBox="0 0 36 36" fill="none" aria-hidden="true" style="margin:0 4px;">
-                <rect width="36" height="36" rx="7" fill="#E31937"/>
-                <path d="M9 27 L18 8 L27 27" stroke="white" stroke-width="2.5"
-                      stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="18" cy="21" r="3.5" fill="white"/>
-            </svg>
-            <strong>Tech M Orion Marketplace</strong>
+            <div class="app-footer-inner">
+                <svg width="20" height="20" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+                    <rect width="36" height="36" rx="6" fill="#E31937"/>
+                    <path d="M9 27 L18 8 L27 27" stroke="white" stroke-width="2.5"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="18" cy="21" r="3.5" fill="white"/>
+                </svg>
+                <span class="app-footer-text">
+                    Powered by <strong>Tech M Orion Marketplace</strong>
+                </span>
+                <span class="app-footer-divider"></span>
+                <span class="app-footer-copy">© 2026 AgentifFlow. All rights reserved.</span>
+            </div>
         </footer>
     </MudMainContent>
 </MudLayout>

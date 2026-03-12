@@ -1,19 +1,25 @@
 /* ── Reset & base ─────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Georama font (TechM Orion) ──────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Georama:ital,wdth,wght@0,75..125,100..900;1,75..125,100..900&display=swap');
+
 :root {
-  /* ── Brand colours ─────────────────────────────────────────────────────── */
-  --primary:        #E31937;              /* TechM Red — primary action   */
-  --primary-dark:   #C41030;              /* darker red — hover state     */
-  --primary-light:  rgba(227,25,55,0.08); /* red tint   — subtle bg       */
-  --primary-ring:   rgba(227,25,55,0.20); /* focus ring                   */
-  --accent:         #FF6B6B;              /* soft red   — highlight       */
-  --accent-light:   rgba(227,25,55,0.05); /* very light red               */
+  /* ── TechM Orion Brand colours ─────────────────────────────────────────── */
+  --primary:        #E31937;              /* TechM Red                      */
+  --primary-dark:   #C41030;              /* darker red — hover             */
+  --primary-light:  rgba(227,25,55,0.10); /* red tint   — subtle bg        */
+  --primary-ring:   rgba(227,25,55,0.22); /* focus ring                    */
+  --header-bg:      #213e55;              /* TechM teal header              */
+  --footer-bg:      #373737;              /* TechM dark footer              */
+  --dark-neutral:   #373737;              /* TechM dark neutral             */
+  --gold:           #fdbc5f;              /* TechM gold accent              */
 
   /* ── Surface ────────────────────────────────────────────────────────────── */
-  --surface:     #ffffff;
-  --surface-alt: #F8FAFC;
-  --border:      #E2E8F0;
+  --surface:        #ffffff;
+  --surface-alt:    #F8FAFC;
+  --surface-raised: #EEF2F7;
+  --border:         #E2E8F0;
 
   /* ── Text ───────────────────────────────────────────────────────────────── */
   --text-primary:   #0F172A;
@@ -37,7 +43,7 @@
 }
 
 body {
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Georama', 'Segoe UI', system-ui, -apple-system, sans-serif;
   background: var(--surface-alt);
   color: var(--text-primary);
   line-height: 1.6;
@@ -57,6 +63,7 @@ body {
   cursor: pointer;
   transition: background 0.18s, box-shadow 0.18s, opacity 0.18s;
   white-space: nowrap;
+  font-family: inherit;
 }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
@@ -71,12 +78,13 @@ body {
 
 .btn-outline {
   background: transparent;
-  border: 1.5px solid var(--border);
-  color: var(--text-secondary);
+  border: 1.5px solid rgba(255,255,255,0.35);
+  color: rgba(255,255,255,0.85);
 }
-.btn-outline:hover:not(:disabled) { background: var(--surface-alt); }
+.btn-outline:hover:not(:disabled) { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.6); }
 
-.btn-sm { padding: 6px 14px; font-size: 0.82rem; }
+.btn-sm { padding: 5px 14px; font-size: 0.82rem; }
+.btn-loading { opacity: 0.8; }
 
 .btn-spinner {
   width: 16px; height: 16px;
@@ -89,24 +97,63 @@ body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── NavBar ──────────────────────────────────────────────────────────────── */
+/* ── NavBar (TechM Orion — teal header) ──────────────────────────────────── */
 .navbar {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: 0 32px;
-  height: 60px;
+  background: var(--header-bg);
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+  padding: 0 28px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
   position: sticky;
   top: 0;
   z-index: 100;
 }
-.navbar-brand { display: flex; align-items: center; gap: 10px; }
-.navbar-title { font-size: 1.15rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.3px; }
-.navbar-user { display: flex; align-items: center; gap: 14px; }
-.user-name { font-size: 0.88rem; color: var(--text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Brand */
+.navbar-brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.navbar-brand-divider {
+  width: 1px; height: 22px;
+  background: rgba(255,255,255,0.22);
+  margin: 0 6px;
+}
+.navbar-title { font-size: 1rem; font-weight: 800; color: #fff; letter-spacing: -0.3px; }
+.navbar-subtitle { font-size: 0.68rem; color: rgba(255,255,255,0.50); font-weight: 400; letter-spacing: 0.5px; white-space: nowrap; }
+
+/* Nav pills (TechM style — frosted-glass pill container) */
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255,255,255,0.12);
+  padding: 4px 6px;
+  border-radius: 25px;
+  margin: 0 20px;
+  flex: 1;
+  max-width: 560px;
+}
+.navbar-link {
+  padding: 6px 20px;
+  border-radius: 20px;
+  font-size: 0.83rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.72);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.navbar-link:hover { background: rgba(255,255,255,0.14); color: #fff; }
+.navbar-link-active {
+  background: var(--dark-neutral) !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+
+/* User zone */
+.navbar-user { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.user-name { font-size: 0.85rem; color: rgba(255,255,255,0.70); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Login Page (TechM Orion inspired — dark + red) ─────────────────────── */
 .login-page {
@@ -241,7 +288,7 @@ body {
 /* ── Tabs ────────────────────────────────────────────────────────────────── */
 .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 24px; overflow-x: auto; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
-.tab { display: flex; align-items: center; gap: 6px; padding: 10px 18px; background: none; border: none; border-bottom: 3px solid transparent; margin-bottom: -2px; font-size: 0.88rem; font-weight: 500; color: var(--text-secondary); cursor: pointer; white-space: nowrap; transition: color 0.15s, border-color 0.15s; border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.tab { display: flex; align-items: center; gap: 6px; padding: 10px 18px; background: none; border: none; border-bottom: 3px solid transparent; margin-bottom: -2px; font-size: 0.88rem; font-weight: 500; color: var(--text-secondary); cursor: pointer; white-space: nowrap; transition: color 0.15s, border-color 0.15s; border-radius: var(--radius-sm) var(--radius-sm) 0 0; font-family: inherit; }
 .tab:hover { color: var(--primary); background: var(--primary-light); }
 .tab-active { color: var(--primary) !important; border-bottom-color: var(--primary) !important; font-weight: 600; }
 
@@ -257,7 +304,7 @@ body {
 .form-field { display: flex; flex-direction: column; gap: 6px; }
 .form-label { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); }
 .required-mark { color: var(--error); }
-.form-input { padding: 10px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem; color: var(--text-primary); background: var(--surface); transition: border-color 0.15s, box-shadow 0.15s; width: 100%; }
+.form-input { padding: 10px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem; color: var(--text-primary); background: var(--surface); transition: border-color 0.15s, box-shadow 0.15s; width: 100%; font-family: inherit; }
 .form-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
 .form-input::placeholder { color: var(--text-hint); }
 .form-hint { font-size: 0.78rem; color: var(--text-hint); }
@@ -269,55 +316,13 @@ body {
 /* ── Alerts ──────────────────────────────────────────────────────────────── */
 .alert { padding: 12px 16px; border-radius: var(--radius-sm); font-size: 0.88rem; }
 .alert-error { background: var(--error-bg); color: var(--error); border: 1px solid #FECACA; }
+.mb-4 { margin-bottom: 16px; }
 
 /* ── Loading spinner ─────────────────────────────────────────────────────── */
 .loading-spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 80px auto; }
 
-/* ── Responsive ──────────────────────────────────────────────────────────── */
-@media (max-width: 1024px) {
-  .login-page { grid-template-columns: 55fr 45fr; }
-}
-
-@media (max-width: 768px) {
-  .login-page { grid-template-columns: 1fr; }
-  .login-hero  { min-height: 45vh; }
-  .lp-body     { padding: 60px 28px 20px; }
-  .lp-footer   { padding: 14px 28px 20px; flex-direction: column; align-items: flex-start; }
-  .lp-mobile-logo { display: flex; }
-  .lp-heading  { font-size: 2rem; }
-}
-
-@media (max-width: 600px) {
-  .navbar { padding: 0 16px; }
-  .page-container { padding: 20px 16px 60px; }
-  .lp-body     { padding: 56px 20px 16px; }
-  .lp-footer   { padding: 14px 20px 20px; }
-  .config-section-body { padding: 16px; }
-  .config-section-header { padding: 16px; }
-  .config-footer { align-items: stretch; }
-  .tab { padding: 10px 12px; font-size: 0.8rem; }
-  .user-name { display: none; }
-}
-
 /* ── Navbar nav links ────────────────────────────────────────────────────── */
-.navbar-links {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  margin: 0 24px;
-}
-.navbar-link {
-  padding: 7px 14px;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: background 0.15s, color 0.15s;
-}
-.navbar-link:hover  { background: var(--surface-raised); color: var(--text-primary); }
-.navbar-link-active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+/* (overridden above in .navbar-links section) */
 
 /* ── Dashboard stat cards ────────────────────────────────────────────────── */
 .dash-cards {
@@ -337,7 +342,7 @@ body {
   box-shadow: var(--shadow-sm);
 }
 .dash-card-icon { font-size: 2rem; flex-shrink: 0; }
-.dash-card-label { font-size: 0.75rem; color: var(--text-hint); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.dash-card-label { font-size: 0.72rem; color: var(--text-hint); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
 .dash-card-value { font-size: 1.4rem; font-weight: 800; color: var(--text-primary); }
 
 /* ── Activity log table ──────────────────────────────────────────────────── */
@@ -352,10 +357,10 @@ body {
   font-size: 0.84rem;
 }
 .activity-log-table th {
-  background: var(--surface-raised);
+  background: var(--surface-alt);
   padding: 10px 14px;
   text-align: left;
-  font-size: 0.72rem;
+  font-size: 0.70rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
@@ -363,6 +368,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
+  font-family: inherit;
 }
 .activity-log-table td {
   padding: 9px 14px;
@@ -376,26 +382,71 @@ body {
 .log-detail { color: var(--text-secondary); font-size: 0.81rem; }
 .log-badge  {
   display: inline-block;
-  padding: 2px 9px;
+  padding: 2px 10px;
   border-radius: 20px;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 700;
   color: #fff;
   white-space: nowrap;
   letter-spacing: 0.2px;
 }
 
-/* ── App footer ──────────────────────────────────────────────────────────── */
+/* ── App footer (TechM Orion dark) ──────────────────────────────────────── */
 .app-footer {
+  background: var(--footer-bg);
+  margin-top: 40px;
+  padding: 0;
+}
+.app-footer-inner {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 14px 24px;
-  font-size: 0.78rem;
-  color: var(--text-hint);
-  border-top: 1px solid var(--border);
-  margin-top: 40px;
+  gap: 10px;
+  padding: 18px 32px;
+  flex-wrap: wrap;
+  border-top: 2px solid rgba(255,255,255,0.06);
 }
-.app-footer strong { color: var(--text-secondary); font-weight: 700; }
+.app-footer-text {
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.50);
+  font-family: inherit;
+  letter-spacing: 0.2px;
+}
+.app-footer-text strong { color: rgba(255,255,255,0.88); font-weight: 700; }
+.app-footer-divider {
+  width: 1px; height: 14px;
+  background: rgba(255,255,255,0.16);
+  margin: 0 4px;
+}
+.app-footer-copy {
+  font-size: 0.74rem;
+  color: rgba(255,255,255,0.28);
+  font-family: inherit;
+}
 
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .login-page { grid-template-columns: 55fr 45fr; }
+}
+
+@media (max-width: 768px) {
+  .login-page { grid-template-columns: 1fr; }
+  .login-hero  { min-height: 45vh; }
+  .lp-body     { padding: 60px 28px 20px; }
+  .lp-footer   { padding: 14px 28px 20px; flex-direction: column; align-items: flex-start; }
+  .lp-mobile-logo { display: flex; }
+  .lp-heading  { font-size: 2rem; }
+  .navbar-links { display: none; }
+}
+
+@media (max-width: 600px) {
+  .navbar { padding: 0 16px; }
+  .page-container { padding: 20px 16px 60px; }
+  .lp-body     { padding: 56px 20px 16px; }
+  .lp-footer   { padding: 14px 20px 20px; }
+  .config-section-body { padding: 16px; }
+  .config-section-header { padding: 16px; }
+  .config-footer { align-items: stretch; }
+  .tab { padding: 10px 12px; font-size: 0.8rem; }
+  .user-name { display: none; }
+}

@@ -280,22 +280,74 @@
 }
 
 
-/* ── App footer ────────────────────────────────────────────────────────────── */
+/* ── App footer (TechM Orion — dark #373737) ───────────────────────────────── */
 .app-footer {
+    background: #373737;
+    margin-top: 40px;
+    padding: 0;
+}
+
+.app-footer-inner {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    padding: 14px 24px;
-    font-size: 0.78rem;
-    color: rgba(0,0,0,0.42);
-    border-top: 1px solid rgba(0,0,0,0.08);
-    background: #fafafa;
-    margin-top: 32px;
-    font-family: 'Roboto', sans-serif;
+    gap: 10px;
+    padding: 18px 32px;
+    flex-wrap: wrap;
+    border-top: 1px solid rgba(255,255,255,0.08);
 }
 
-.app-footer strong {
-    color: rgba(0,0,0,0.62);
+.app-footer-text {
+    font-size: 0.82rem;
+    color: rgba(255,255,255,0.55);
+    font-family: 'Georama', 'Roboto', sans-serif;
+    letter-spacing: 0.2px;
+}
+
+.app-footer-text strong {
+    color: rgba(255,255,255,0.9);
     font-weight: 700;
+}
+
+.app-footer-divider {
+    width: 1px;
+    height: 14px;
+    background: rgba(255,255,255,0.18);
+    margin: 0 4px;
+}
+
+.app-footer-copy {
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.3);
+    font-family: 'Georama', 'Roboto', sans-serif;
+}
+
+/* ── TechM Orion global font override ─────────────────────────────────────── */
+body, .mud-typography, .mud-nav-link, .mud-button {
+    font-family: 'Georama', 'Roboto', sans-serif !important;
+}
+
+/* ── MudBlazor AppBar & Drawer overrides ───────────────────────────────────── */
+.mud-appbar {
+    background: #213e55 !important;
+}
+
+/* Drawer nav — TechM rounded-pill active state */
+.mud-nav-link.active,
+.mud-nav-link:hover {
+    background: rgba(227,25,55,0.15) !important;
+    border-radius: 20px !important;
+    color: #fff !important;
+}
+.mud-nav-link {
+    color: rgba(255,255,255,0.80) !important;
+    border-radius: 20px !important;
+    margin: 2px 0 !important;
+    transition: background 0.15s !important;
+}
+.mud-nav-link .mud-nav-link-icon {
+    color: rgba(255,255,255,0.65) !important;
+}
+.mud-nav-link.active .mud-nav-link-icon {
+    color: #E31937 !important;
 }

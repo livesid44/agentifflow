@@ -18,17 +18,21 @@ export default function NavBar() {
 
   return (
     <nav className="navbar">
+      {/* ── Brand: logo mark + wordmark + divider + marketplace subtitle ── */}
       <div className="navbar-brand">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-          <rect width="32" height="32" rx="7" fill="#E31937" />
-          <path d="M8 24 L16 8 L24 24"
+        <svg width="30" height="30" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+          <rect width="36" height="36" rx="6" fill="#E31937" />
+          <path d="M9 27 L18 8 L27 27"
             stroke="white" strokeWidth="2.5"
             strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx="16" cy="19" r="3" fill="white" />
+          <circle cx="18" cy="21" r="3.5" fill="white" />
         </svg>
         <span className="navbar-title">AgentifFlow</span>
+        <span className="navbar-brand-divider" aria-hidden="true" />
+        <span className="navbar-subtitle">Tech M Orion Marketplace</span>
       </div>
 
+      {/* ── Nav pills (TechM glass pill bar) ── */}
       {account && (
         <div className="navbar-links">
           {navLinks.map(({ to, label }) => (
@@ -43,6 +47,7 @@ export default function NavBar() {
         </div>
       )}
 
+      {/* ── User zone ── */}
       <div className="navbar-user">
         {account && (
           <>
