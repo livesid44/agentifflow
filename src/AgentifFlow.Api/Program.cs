@@ -172,14 +172,28 @@ var app = builder.Build();
 // for both new installs (fresh DB) and existing installs (old schema).
 using (var scope = app.Services.CreateScope())
 {
+    var startupLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     try
     {
         var db = scope.ServiceProvider.GetRequiredService<AgentifFlowDbContext>();
         await db.Database.MigrateAsync();
+
+        // ── SQLite schema safety net ─────────────────────────────────────────
+        // EF can record a migration as applied (in __EFMigrationsHistory) without
+        // the DDL actually executing on the live file — for example when the DB was
+        // pre-created with EnsureCreated or restored from a backup taken before the
+        // migration ran.  We defend against this by explicitly checking each column
+        // that was added after the initial schema and adding it when absent.
+        if (db.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations",
+                column: "GraphMailboxAddress",
+                definition: "TEXT NULL");
+        }
     }
     catch (Exception ex)
     {
-        var startupLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         startupLogger.LogWarning(ex,
             "Database migration failed — the app will start but database-dependent " +
             "features will be unavailable until the connection is configured.");
@@ -210,3 +224,46 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// ── Local helpers ─────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Ensures a column exists in the given SQLite table, adding it if absent.
+/// This is a startup safety net for cases where EF Core recorded a migration
+/// as applied in __EFMigrationsHistory but the DDL never ran on the live file
+/// (e.g. the DB was pre-created, restored from an older backup, or the migration
+/// ran on a different file path).
+/// </summary>
+static async Task EnsureSqliteColumnAsync(
+    AgentifFlow.Api.Data.AgentifFlowDbContext db,
+    ILogger logger,
+    string table,
+    string column,
+    string definition)
+{
+    var conn = db.Database.GetDbConnection();
+    var shouldClose = conn.State != System.Data.ConnectionState.Open;
+    if (shouldClose) await conn.OpenAsync();
+    try
+    {
+        using var cmd = conn.CreateCommand();
+
+        // PRAGMA table_info returns one row per column; COUNT(*) = 0 means absent.
+        cmd.CommandText =
+            $"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = '{column}'";
+        var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+
+        if (count == 0)
+        {
+            logger.LogWarning(
+                "Schema repair: column '{Column}' missing from '{Table}' — adding it now.",
+                column, table);
+            cmd.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {definition}";
+            await cmd.ExecuteNonQueryAsync();
+        }
+    }
+    finally
+    {
+        if (shouldClose) await conn.CloseAsync();
+    }
+}
