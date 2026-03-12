@@ -42,6 +42,16 @@ public class AppConfiguration
     [MaxLength(1000)]
     public string? SqlConnectionString { get; set; }
 
+    // ── Agent Flow ───────────────────────────────────────────────────────────
+    [MaxLength(200)]
+    public string? NotificationEmail { get; set; }
+
+    public int BlobPollIntervalSeconds { get; set; } = 60;
+
+    public int MaxRetryCount { get; set; } = 3;
+
+    public bool AgentFlowEnabled { get; set; } = false;
+
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     [MaxLength(200)]
@@ -61,6 +71,10 @@ public class AppConfigurationDto
     public string? BlobStorageConnectionString { get; set; }
     public string? BlobContainerName { get; set; }
     public string? SqlConnectionString { get; set; }
+    public string? NotificationEmail { get; set; }
+    public int BlobPollIntervalSeconds { get; set; } = 60;
+    public int MaxRetryCount { get; set; } = 3;
+    public bool AgentFlowEnabled { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
@@ -97,4 +111,10 @@ public class UpdateAppConfigurationRequest
 
     [MaxLength(1000)]
     public string? SqlConnectionString { get; set; }
+
+    [MaxLength(200)]
+    public string? NotificationEmail { get; set; }
+    public int? BlobPollIntervalSeconds { get; set; }
+    public int? MaxRetryCount { get; set; }
+    public bool? AgentFlowEnabled { get; set; }
 }

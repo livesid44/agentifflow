@@ -44,6 +44,10 @@ public class AppConfigurationService : IAppConfigurationService
         if (request.BlobStorageConnectionString is not null) config.BlobStorageConnectionString = request.BlobStorageConnectionString;
         if (request.BlobContainerName is not null) config.BlobContainerName = request.BlobContainerName;
         if (request.SqlConnectionString is not null) config.SqlConnectionString = request.SqlConnectionString;
+        if (request.NotificationEmail is not null) config.NotificationEmail = request.NotificationEmail;
+        if (request.BlobPollIntervalSeconds.HasValue) config.BlobPollIntervalSeconds = request.BlobPollIntervalSeconds.Value;
+        if (request.MaxRetryCount.HasValue) config.MaxRetryCount = request.MaxRetryCount.Value;
+        if (request.AgentFlowEnabled.HasValue) config.AgentFlowEnabled = request.AgentFlowEnabled.Value;
 
         config.UpdatedAt = DateTime.UtcNow;
         config.UpdatedBy = updatedBy;
@@ -73,6 +77,10 @@ public class AppConfigurationService : IAppConfigurationService
         BlobStorageConnectionString = Mask(config.BlobStorageConnectionString),
         BlobContainerName = config.BlobContainerName,
         SqlConnectionString = Mask(config.SqlConnectionString),
+        NotificationEmail = config.NotificationEmail,
+        BlobPollIntervalSeconds = config.BlobPollIntervalSeconds,
+        MaxRetryCount = config.MaxRetryCount,
+        AgentFlowEnabled = config.AgentFlowEnabled,
         UpdatedAt = config.UpdatedAt,
         UpdatedBy = config.UpdatedBy
     };

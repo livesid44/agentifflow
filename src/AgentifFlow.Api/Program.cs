@@ -88,6 +88,9 @@ builder.Services.AddScoped<IGraphMailService, GraphMailService>();
 builder.Services.AddScoped<ILlmService, LlmService>();
 builder.Services.AddScoped<IAgentTaskService, AgentTaskService>();
 builder.Services.AddScoped<IAppConfigurationService, AppConfigurationService>();
+builder.Services.AddScoped<IBlobWatcherJobService, BlobWatcherJobService>();
+builder.Services.AddScoped<ICsvValidationService, CsvValidationService>();
+builder.Services.AddHostedService<BlobWatcherBackgroundService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

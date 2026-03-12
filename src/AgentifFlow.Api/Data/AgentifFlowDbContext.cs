@@ -12,6 +12,7 @@ public class AgentifFlowDbContext : DbContext
 
     public DbSet<AgentTask> AgentTasks => Set<AgentTask>();
     public DbSet<AppConfiguration> AppConfigurations => Set<AppConfiguration>();
+    public DbSet<BlobWatcherJob> BlobWatcherJobs => Set<BlobWatcherJob>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +35,18 @@ public class AgentifFlowDbContext : DbContext
         {
             entity.ToTable("AppConfigurations");
             entity.HasKey(e => e.Id);
+        });
+
+        modelBuilder.Entity<BlobWatcherJob>(entity =>
+        {
+            entity.ToTable("BlobWatcherJobs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.BlobName).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.ContainerName).HasMaxLength(200);
+            entity.Property(e => e.Status)
+                  .HasConversion<string>()
+                  .HasMaxLength(50);
+            entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
         });
     }
 }

@@ -1,0 +1,261 @@
+@page "/monitor"
+@attribute [Authorize]
+@inject IBlobJobApiService JobService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Monitor — AgentifFlow</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-1" Style="font-weight:700; letter-spacing:-0.5px;">
+    Agent Activity Monitor
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-6" Style="color:var(--mud-palette-text-secondary);">
+    Live view of all CSV blob-processing jobs. Refreshes every 15 seconds.
+</MudText>
+
+<!-- ── Summary cards ──────────────────────────────────────────────────────── -->
+<MudGrid Spacing="3" Class="mb-6">
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.CheckCircle" Color="Color.Success" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_completed</MudText>
+            <MudText Typo="Typo.caption">Completed</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.HourglassTop" Color="Color.Warning" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_inProgress</MudText>
+            <MudText Typo="Typo.caption">In Progress</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.ErrorOutline" Color="Color.Error" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_failed</MudText>
+            <MudText Typo="Typo.caption">Failed</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.MarkEmailUnread" Color="Color.Info" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_awaitingApproval</MudText>
+            <MudText Typo="Typo.caption">Awaiting Approval</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- ── Toolbar ────────────────────────────────────────────────────────────── -->
+<div class="d-flex align-center gap-3 mb-4 flex-wrap">
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Refresh"
+               OnClick="LoadJobsAsync" Disabled="@_loading">
+        Refresh
+    </MudButton>
+    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-disabled);">
+        @if (_lastRefresh.HasValue)
+        {
+            <span>Last refresh: @_lastRefresh.Value.ToLocalTime().ToString("HH:mm:ss")</span>
+        }
+    </MudText>
+</div>
+
+<!-- ── Jobs Table ─────────────────────────────────────────────────────────── -->
+@if (_loading && _jobs.Count == 0)
+{
+    <div class="d-flex justify-center mt-8">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    </div>
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_jobs.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">
+        No jobs found. Enable Agent Flow in <MudLink Href="/configuration">Integration Settings</MudLink>
+        and upload a CSV file to your configured Blob container.
+    </MudAlert>
+}
+else
+{
+    <MudTable Items="_jobs" Hover="true" Dense="true" Striped="true"
+              SortLabel="Sort By" Elevation="2">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<BlobWatcherJobDto, object>(x => x.DetectedAt)">Detected</MudTableSortLabel></MudTh>
+            <MudTh>Blob Name</MudTh>
+            <MudTh>Container</MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<BlobWatcherJobDto, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
+            <MudTh>Retries</MudTh>
+            <MudTh>Rows Inserted</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Detected">@context.DetectedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+            <MudTd DataLabel="Blob Name">
+                <MudText Style="font-family:monospace; font-size:.85em;">@context.BlobName</MudText>
+            </MudTd>
+            <MudTd DataLabel="Container">@(context.ContainerName ?? "—")</MudTd>
+            <MudTd DataLabel="Status">@StatusChip(context.Status)</MudTd>
+            <MudTd DataLabel="Retries">@context.RetryCount</MudTd>
+            <MudTd DataLabel="Rows Inserted">@(context.RowsInserted?.ToString() ?? "—")</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="1">
+                    <MudIconButton Icon="@Icons.Material.Filled.Info" Size="Size.Small"
+                                   OnClick="() => ShowLog(context)"
+                                   title="View log" />
+                    @if (context.Status is "AwaitingApproval" or "ValidationFailed")
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.ThumbUp" Color="Color.Success"
+                                       Size="Size.Small"
+                                       OnClick="() => ApproveAsync(context.Id)"
+                                       title="Approve for retry" />
+                        <MudIconButton Icon="@Icons.Material.Filled.ThumbDown" Color="Color.Error"
+                                       Size="Size.Small"
+                                       OnClick="() => RejectAsync(context.Id)"
+                                       title="Reject" />
+                    }
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+<!-- ── Log Detail Dialog ─────────────────────────────────────────────────── -->
+<MudDialog @bind-Visible="_logDialogVisible">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Article" Class="mr-2" />
+            Job Log — @_selectedJob?.BlobName
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_selectedJob is not null)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Status: <strong>@_selectedJob.Status</strong></MudText>
+            @if (!string.IsNullOrEmpty(_selectedJob.ErrorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_selectedJob.ErrorMessage</MudAlert>
+            }
+            <MudPaper Elevation="0" Style="background:var(--mud-palette-background-grey); border-radius:8px; max-height:320px; overflow-y:auto;">
+                <pre style="padding:12px; font-size:.8em; white-space:pre-wrap; margin:0;">@(string.IsNullOrWhiteSpace(_selectedJob.LogDetails) ? "(no log entries)" : _selectedJob.LogDetails)</pre>
+            </MudPaper>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _logDialogVisible = false">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<BlobWatcherJobDto> _jobs = [];
+    private bool _loading;
+    private string? _error;
+    private DateTime? _lastRefresh;
+    private Timer? _refreshTimer;
+
+    private bool _logDialogVisible;
+    private BlobWatcherJobDto? _selectedJob;
+
+    // Summary counts
+    private int _completed;
+    private int _inProgress;
+    private int _failed;
+    private int _awaitingApproval;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadJobsAsync();
+        _refreshTimer = new Timer(async _ =>
+        {
+            await LoadJobsAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+    }
+
+    private async Task LoadJobsAsync()
+    {
+        _loading = true;
+        _error   = null;
+        try
+        {
+            _jobs         = await JobService.GetJobsAsync(100);
+            _lastRefresh  = DateTime.UtcNow;
+            ComputeSummary();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load jobs: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ComputeSummary()
+    {
+        _completed        = _jobs.Count(j => j.Status == "Completed");
+        _inProgress       = _jobs.Count(j => j.Status is "Detected" or "Validating" or "Inserting" or "Retrying");
+        _failed           = _jobs.Count(j => j.Status is "Failed" or "Rejected");
+        _awaitingApproval = _jobs.Count(j => j.Status is "AwaitingApproval" or "ValidationFailed");
+    }
+
+    private void ShowLog(BlobWatcherJobDto job)
+    {
+        _selectedJob      = job;
+        _logDialogVisible = true;
+    }
+
+    private async Task ApproveAsync(int id)
+    {
+        try
+        {
+            await JobService.ApproveJobAsync(id);
+            Snackbar.Add("Job approved for retry.", Severity.Success);
+            await LoadJobsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Approve failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RejectAsync(int id)
+    {
+        try
+        {
+            await JobService.RejectJobAsync(id);
+            Snackbar.Add("Job rejected.", Severity.Warning);
+            await LoadJobsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Reject failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private RenderFragment StatusChip(string status) => builder =>
+    {
+        var (color, icon) = status switch
+        {
+            "Completed"        => (Color.Success,   Icons.Material.Filled.CheckCircle),
+            "Failed"           => (Color.Error,     Icons.Material.Filled.ErrorOutline),
+            "Rejected"         => (Color.Dark,      Icons.Material.Filled.Cancel),
+            "ValidationFailed" => (Color.Warning,   Icons.Material.Filled.WarningAmber),
+            "AwaitingApproval" => (Color.Info,      Icons.Material.Filled.MarkEmailUnread),
+            "Retrying"         => (Color.Secondary, Icons.Material.Filled.Replay),
+            _                  => (Color.Default,   Icons.Material.Filled.HourglassTop)
+        };
+        builder.OpenComponent<MudChip<string>>(0);
+        builder.AddAttribute(1, "Text", status);
+        builder.AddAttribute(2, "Color", color);
+        builder.AddAttribute(3, "Icon", icon);
+        builder.AddAttribute(4, "Size", Size.Small);
+        builder.CloseComponent();
+    };
+
+    public void Dispose() => _refreshTimer?.Dispose();
+}

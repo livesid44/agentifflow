@@ -13,6 +13,10 @@ public class AppConfigurationDto
     public string? BlobStorageConnectionString { get; set; }
     public string? BlobContainerName { get; set; }
     public string? SqlConnectionString { get; set; }
+    public string? NotificationEmail { get; set; }
+    public int BlobPollIntervalSeconds { get; set; } = 60;
+    public int MaxRetryCount { get; set; } = 3;
+    public bool AgentFlowEnabled { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
@@ -30,6 +34,10 @@ public class UpdateAppConfigurationRequest
     public string? BlobStorageConnectionString { get; set; }
     public string? BlobContainerName { get; set; }
     public string? SqlConnectionString { get; set; }
+    public string? NotificationEmail { get; set; }
+    public int? BlobPollIntervalSeconds { get; set; }
+    public int? MaxRetryCount { get; set; }
+    public bool? AgentFlowEnabled { get; set; }
 }
 
 /// <summary>
