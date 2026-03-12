@@ -182,7 +182,7 @@ export default function LoginPage() {
           </div>
 
           <h1 className="lp-heading">
-            Agentif<span className="lp-accent">Flow</span>
+            Tech M Orion <span className="lp-accent">Marketplace</span>
           </h1>
           <p className="lp-sub">AI Workflow Platform</p>
           <p className="lp-tagline">Agentify your Business</p>
