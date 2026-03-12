@@ -481,3 +481,9 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 src/AgentifFlow.Api/AgentifFlow.Api.http
+
+# Frontend
+src/AgentifFlow.Web/node_modules/
+src/AgentifFlow.Web/dist/
+src/AgentifFlow.Web/.env.local
+src/AgentifFlow.Web/.env.*.local

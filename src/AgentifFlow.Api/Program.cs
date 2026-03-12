@@ -7,6 +7,21 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── CORS (allow the React frontend during development) ───────────────────────
+var frontendOrigins = "_frontendOrigins";
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(frontendOrigins, policy =>
+    {
+        var origins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>()
+                      ?? ["http://localhost:5173", "http://localhost:3000"];
+        policy.WithOrigins(origins)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
 // ── Azure AD / OAuth2.0 authentication ──────────────────────────────────────
 builder.Services.AddMicrosoftIdentityWebApiAuthentication(builder.Configuration)
     .EnableTokenAcquisitionToCallDownstreamApi()
@@ -31,6 +46,7 @@ builder.Services.AddSingleton<AzureOpenAIClient>(_ =>
 builder.Services.AddScoped<IGraphMailService, GraphMailService>();
 builder.Services.AddScoped<ILlmService, LlmService>();
 builder.Services.AddScoped<IAgentTaskService, AgentTaskService>();
+builder.Services.AddScoped<IAppConfigurationService, AppConfigurationService>();
 
 // ── MVC / API ────────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
@@ -99,6 +115,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors(frontendOrigins);
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

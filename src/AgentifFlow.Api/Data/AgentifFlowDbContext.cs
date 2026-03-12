@@ -11,6 +11,7 @@ public class AgentifFlowDbContext : DbContext
     }
 
     public DbSet<AgentTask> AgentTasks => Set<AgentTask>();
+    public DbSet<AppConfiguration> AppConfigurations => Set<AppConfiguration>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +28,12 @@ public class AgentifFlowDbContext : DbContext
             entity.Property(e => e.Status)
                   .HasConversion<string>()
                   .HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<AppConfiguration>(entity =>
+        {
+            entity.ToTable("AppConfigurations");
+            entity.HasKey(e => e.Id);
         });
     }
 }
