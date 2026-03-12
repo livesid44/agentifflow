@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.VisualStudio.JavaScript.Sdk/1.0">
+
+  <PropertyGroup>
+    <!--
+      Command run by Visual Studio when you press F5 / "Start Debugging".
+      "npm run dev" launches the Vite dev server at http://localhost:5173.
+    -->
+    <StartupCommand>npm run dev</StartupCommand>
+
+    <!--
+      Do NOT run "npm run build" whenever the VS solution is built.
+      The Vite production build is only needed for deployment.
+    -->
+    <ShouldRunBuildScript>false</ShouldRunBuildScript>
+
+    <!--
+      Root URL that VS will open in the browser when debugging.
+      Vite defaults to port 5173.
+    -->
+    <JavaScriptProjectRoot>$(MSBuildProjectDirectory)\</JavaScriptProjectRoot>
+  </PropertyGroup>
+
+</Project>
