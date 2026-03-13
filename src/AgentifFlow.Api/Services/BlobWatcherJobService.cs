@@ -56,7 +56,7 @@ public class BlobWatcherJobService : IBlobWatcherJobService
     }
 
     public async Task<BlobWatcherJob?> UpdateStatusAsync(int id, BlobWatcherJobStatus status,
-        string? errorMessage = null, string? logEntry = null)
+        string? errorMessage = null, string? logEntry = null, DateTime? retryAfterUtc = null)
     {
         var job = await _db.BlobWatcherJobs.FindAsync(id);
         if (job is null) return null;
@@ -72,6 +72,9 @@ public class BlobWatcherJobService : IBlobWatcherJobService
                 ? $"[{DateTime.UtcNow:u}] {logEntry}"
                 : $"{job.LogDetails}\n[{DateTime.UtcNow:u}] {logEntry}";
 
+        if (retryAfterUtc.HasValue)
+            job.RetryAfterUtc = retryAfterUtc.Value;
+
         if (status is BlobWatcherJobStatus.Completed or BlobWatcherJobStatus.Failed or BlobWatcherJobStatus.Rejected)
             job.CompletedAt = DateTime.UtcNow;
 
@@ -86,8 +89,9 @@ public class BlobWatcherJobService : IBlobWatcherJobService
         if (job is null) return null;
 
         job.RetryCount++;
-        job.Status    = BlobWatcherJobStatus.Retrying;
-        job.UpdatedAt = DateTime.UtcNow;
+        job.Status        = BlobWatcherJobStatus.Retrying;
+        job.UpdatedAt     = DateTime.UtcNow;
+        job.RetryAfterUtc = null;   // cleared — timer resets on next failure
         job.LogDetails = string.IsNullOrEmpty(job.LogDetails)
             ? $"[{DateTime.UtcNow:u}] Retry {job.RetryCount} initiated."
             : $"{job.LogDetails}\n[{DateTime.UtcNow:u}] Retry {job.RetryCount} initiated.";
@@ -168,6 +172,7 @@ public class BlobWatcherJobService : IBlobWatcherJobService
         DetectedAt      = j.DetectedAt,
         CompletedAt     = j.CompletedAt,
         UpdatedAt       = j.UpdatedAt,
+        RetryAfterUtc   = j.RetryAfterUtc,
         NotificationRef = j.NotificationRef,
         UserReply       = j.UserReply
     };

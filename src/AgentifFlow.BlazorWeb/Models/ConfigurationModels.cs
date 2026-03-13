@@ -17,6 +17,7 @@ public class AppConfigurationDto
     public string? NotificationEmail { get; set; }
     public int BlobPollIntervalSeconds { get; set; } = 60;
     public int MaxRetryCount { get; set; } = 3;
+    public int AutoRetryIntervalMinutes { get; set; } = 30;
     public bool AgentFlowEnabled { get; set; }
     // Agent Designer
     public bool BlobEnabled { get; set; }
@@ -53,6 +54,7 @@ public class UpdateAppConfigurationRequest
     public string? NotificationEmail { get; set; }
     public int? BlobPollIntervalSeconds { get; set; }
     public int? MaxRetryCount { get; set; }
+    public int? AutoRetryIntervalMinutes { get; set; }
     public bool? AgentFlowEnabled { get; set; }
     // Agent Designer
     public bool? BlobEnabled { get; set; }

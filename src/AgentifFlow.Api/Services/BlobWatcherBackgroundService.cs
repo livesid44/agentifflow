@@ -148,6 +148,32 @@ public class BlobWatcherBackgroundService : BackgroundService
                 jobService, csvValidationService, llmService, mailService, ct);
         }
 
+        // ── Auto-retry: promote AwaitingApproval jobs whose timer has elapsed ─
+        var timedOutJobs = await db.BlobWatcherJobs
+            .Where(j => j.Status == BlobWatcherJobStatus.AwaitingApproval &&
+                        j.RetryAfterUtc != null &&
+                        j.RetryAfterUtc <= DateTime.UtcNow)
+            .ToListAsync(ct);
+
+        foreach (var tj in timedOutJobs)
+        {
+            if (tj.RetryCount < config.MaxRetryCount)
+            {
+                _logger.LogInformation(
+                    "Auto-retry timer elapsed for job {JobId} ('{Blob}') — scheduling retry {N}.",
+                    tj.Id, tj.BlobName, tj.RetryCount + 1);
+                await jobService.IncrementRetryAsync(tj.Id);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Job {JobId} ('{Blob}') reached MaxRetryCount ({Max}) — marking as Failed.",
+                    tj.Id, tj.BlobName, config.MaxRetryCount);
+                await jobService.UpdateStatusAsync(tj.Id, BlobWatcherJobStatus.Failed,
+                    logEntry: $"Max retry count ({config.MaxRetryCount}) exceeded. Job permanently failed.");
+            }
+        }
+
         // Re-process blobs approved for retry
         var retryJobs = await db.BlobWatcherJobs
             .Where(j => j.Status == BlobWatcherJobStatus.Retrying)
@@ -375,19 +401,29 @@ public class BlobWatcherBackgroundService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to download blob {BlobName}", blobName);
-            await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
-                $"Download failed: {ex.Message}", "Blob download error.");
+
+            var dlRef        = GenerateRef();
+            var retryAfter   = AutoRetryAfter(config);
+            var logMsg       = retryAfter.HasValue
+                ? $"Download failed: {ex.Message}. Waiting for reply or auto-retry at {retryAfter:u} [Ref: {dlRef}]."
+                : $"Download failed: {ex.Message}. Waiting for reply [Ref: {dlRef}].";
+
+            await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.AwaitingApproval,
+                $"Download failed: {ex.Message}", logMsg, retryAfter);
 
             if (config.NotifyOnDataIssue)
             {
-                var dlRef = GenerateRef();
                 await jobService.SetNotificationRefAsync(job.Id, dlRef);
+                var retryNote = retryAfter.HasValue
+                    ? $"The agent will also automatically retry at {retryAfter:u} UTC if no reply is received.\n\n"
+                    : "";
                 await TrySendEmailAsync(mailService, config.NotificationEmail,
                     $"[AgentifFlow] Failed to Download File: {blobName} [Ref: {dlRef}]",
                     $"The AgentifFlow agent could not download \"{blobName}\" " +
                     $"from container \"{config.BlobContainerName}\".\n\n" +
                     $"Error: {ex.Message}\n\n" +
                     "Please verify the file exists and the storage account is accessible.\n\n" +
+                    retryNote +
                     $"Reply to this email on this thread once the issue is resolved.\n\nReference: {dlRef}",
                     $"download-failure [{dlRef}]");
             }
@@ -443,11 +479,13 @@ public class BlobWatcherBackgroundService : BackgroundService
             }
 
             await jobService.SetNotificationRefAsync(job.Id, valRef);
+            var valRetryAfter = sent ? AutoRetryAfter(config) : (DateTime?)null;
             await jobService.UpdateStatusAsync(job.Id,
                 sent ? BlobWatcherJobStatus.AwaitingApproval : BlobWatcherJobStatus.ValidationFailed,
                 logEntry: sent
                     ? $"Notification sent to {config.NotificationEmail} [Ref: {valRef}]. Awaiting reply."
-                    : "Notification skipped (NotifyOnDataIssue disabled or NotificationEmail not configured).");
+                    : "Notification skipped (NotifyOnDataIssue disabled or NotificationEmail not configured).",
+                retryAfterUtc: valRetryAfter);
             return;
         }
 
@@ -467,24 +505,32 @@ public class BlobWatcherBackgroundService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "SQL insert failed for {BlobName}", blobName);
-                await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
-                    $"SQL insert failed: {ex.Message}", $"SQL insert error: {ex.Message}");
+
+                var sqlRef      = GenerateRef();
+                var retryAfter  = AutoRetryAfter(config);
+                var logMsg      = retryAfter.HasValue
+                    ? $"SQL insert error: {ex.Message}. Waiting for reply or auto-retry at {retryAfter:u} [Ref: {sqlRef}]."
+                    : $"SQL insert error: {ex.Message}. Waiting for reply [Ref: {sqlRef}].";
+
+                await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.AwaitingApproval,
+                    $"SQL insert failed: {ex.Message}", logMsg, retryAfter);
 
                 if (config.NotifyOnDataIssue)
                 {
-                    var sqlRef = GenerateRef();
                     await jobService.SetNotificationRefAsync(job.Id, sqlRef);
+                    var retryNote = retryAfter.HasValue
+                        ? $"The agent will also automatically retry at {retryAfter:u} UTC if no reply is received.\n\n"
+                        : "";
                     await TrySendEmailAsync(mailService, config.NotificationEmail,
                         $"[AgentifFlow] SQL Insert Failed: {blobName} [Ref: {sqlRef}]",
                         $"The CSV file \"{blobName}\" passed validation but could not be inserted into " +
                         $"the database.\n\nError: {ex.Message}\n\n" +
                         "Please check the SQL connection string and ensure the database is reachable.\n\n" +
+                        retryNote +
                         $"Reply to this email on this thread once the issue is resolved.\n\nReference: {sqlRef}",
                         $"sql-failure [{sqlRef}]");
                 }
 
-                if (job.RetryCount < config.MaxRetryCount)
-                    await jobService.IncrementRetryAsync(job.Id);
                 return;
             }
         }
@@ -700,4 +746,17 @@ public class BlobWatcherBackgroundService : BackgroundService
         public string Source { get; set; } = "";
         public string Target { get; set; } = "";
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns the UTC timestamp after which the job should be automatically retried,
+    /// or <c>null</c> when AutoRetryIntervalMinutes is 0 (timer disabled).
+    /// </summary>
+    private static DateTime? AutoRetryAfter(AppConfiguration config) =>
+        config.AutoRetryIntervalMinutes > 0
+            ? DateTime.UtcNow.AddMinutes(config.AutoRetryIntervalMinutes)
+            : null;
 }

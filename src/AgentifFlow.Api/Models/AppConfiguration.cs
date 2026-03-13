@@ -60,6 +60,13 @@ public class AppConfiguration
 
     public bool AgentFlowEnabled { get; set; } = false;
 
+    /// <summary>
+    /// How many minutes to wait before automatically retrying a failed job when no
+    /// email reply has been received.  Set to 0 to disable automatic time-based retry
+    /// (only an email reply will trigger a re-try in that case).
+    /// </summary>
+    public int AutoRetryIntervalMinutes { get; set; } = 30;
+
     // ── Agent Designer — Blob Source ─────────────────────────────────────────
     public bool BlobEnabled { get; set; } = false;
 
@@ -122,6 +129,7 @@ public class AppConfigurationDto
     public string? NotificationEmail { get; set; }
     public int BlobPollIntervalSeconds { get; set; } = 60;
     public int MaxRetryCount { get; set; } = 3;
+    public int AutoRetryIntervalMinutes { get; set; } = 30;
     public bool AgentFlowEnabled { get; set; }
     // Agent Designer
     public bool BlobEnabled { get; set; }
@@ -191,6 +199,7 @@ public class UpdateAppConfigurationRequest
     public string? NotificationEmail { get; set; }
     public int? BlobPollIntervalSeconds { get; set; }
     public int? MaxRetryCount { get; set; }
+    public int? AutoRetryIntervalMinutes { get; set; }
     public bool? AgentFlowEnabled { get; set; }
 
     // Agent Designer

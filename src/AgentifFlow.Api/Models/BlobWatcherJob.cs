@@ -46,6 +46,13 @@ public class BlobWatcherJob
     public DateTime? CompletedAt { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// When set, the background service will automatically promote this job to
+    /// <see cref="BlobWatcherJobStatus.Retrying"/> once this timestamp is reached,
+    /// without waiting for an email reply.  Cleared when a retry is initiated.
+    /// </summary>
+    public DateTime? RetryAfterUtc { get; set; }
+
     // ── Notification email tracking ───────────────────────────────────────────
 
     /// <summary>
@@ -77,6 +84,7 @@ public class BlobWatcherJobDto
     public DateTime DetectedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public DateTime? RetryAfterUtc { get; set; }
     public string? NotificationRef { get; set; }
     public string? UserReply { get; set; }
 }

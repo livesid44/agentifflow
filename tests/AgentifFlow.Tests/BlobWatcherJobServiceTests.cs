@@ -219,4 +219,53 @@ public class BlobWatcherJobServiceTests
         var all = (await svc.GetAllAsync(limit: 100)).ToList();
         Assert.Equal(3, all.Count(j => j.BlobName == noFileSentinel));
     }
+
+    /// <summary>
+    /// UpdateStatusAsync with a retryAfterUtc value must persist RetryAfterUtc on the job,
+    /// and IncrementRetryAsync must clear it (timer resets to null on retry initiation).
+    /// </summary>
+    [Fact]
+    public async Task UpdateStatusAsync_SetsRetryAfterUtc_AndIncrementRetryClears()
+    {
+        using var db  = CreateDb(nameof(UpdateStatusAsync_SetsRetryAfterUtc_AndIncrementRetryClears));
+        var svc       = CreateSvc(db);
+
+        var job        = await svc.CreateAsync("test.csv", "uploads");
+        var retryAfter = DateTime.UtcNow.AddMinutes(30);
+
+        // Set AwaitingApproval with a future retry timer.
+        await svc.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.AwaitingApproval,
+            errorMessage: "SQL failed", retryAfterUtc: retryAfter);
+
+        var persisted = await db.BlobWatcherJobs.FindAsync(job.Id);
+        Assert.Equal(BlobWatcherJobStatus.AwaitingApproval, persisted!.Status);
+        Assert.NotNull(persisted.RetryAfterUtc);
+        Assert.True(Math.Abs((retryAfter - persisted.RetryAfterUtc!.Value).TotalSeconds) < 1);
+
+        // IncrementRetryAsync must clear RetryAfterUtc.
+        await svc.IncrementRetryAsync(job.Id);
+
+        var afterRetry = await db.BlobWatcherJobs.FindAsync(job.Id);
+        Assert.Equal(BlobWatcherJobStatus.Retrying, afterRetry!.Status);
+        Assert.Equal(1, afterRetry.RetryCount);
+        Assert.Null(afterRetry.RetryAfterUtc);
+    }
+
+    /// <summary>
+    /// ExistsAsync must consider AwaitingApproval jobs as in-flight so that the same
+    /// failed blob is not started as a brand-new job while waiting for auto-retry.
+    /// </summary>
+    [Fact]
+    public async Task ExistsAsync_ReturnsTrueWhenAwaitingApproval()
+    {
+        using var db = CreateDb(nameof(ExistsAsync_ReturnsTrueWhenAwaitingApproval));
+        var svc      = CreateSvc(db);
+
+        var job = await svc.CreateAsync("data.csv", "container");
+        await svc.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.AwaitingApproval,
+            retryAfterUtc: DateTime.UtcNow.AddMinutes(30));
+
+        // The same blob must be considered in-flight.
+        Assert.True(await svc.ExistsAsync("data.csv", "container"));
+    }
 }

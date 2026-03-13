@@ -48,6 +48,7 @@ public class AppConfigurationService : IAppConfigurationService
         if (request.NotificationEmail is not null) config.NotificationEmail = request.NotificationEmail;
         if (request.BlobPollIntervalSeconds.HasValue) config.BlobPollIntervalSeconds = request.BlobPollIntervalSeconds.Value;
         if (request.MaxRetryCount.HasValue) config.MaxRetryCount = request.MaxRetryCount.Value;
+        if (request.AutoRetryIntervalMinutes.HasValue) config.AutoRetryIntervalMinutes = request.AutoRetryIntervalMinutes.Value;
         if (request.AgentFlowEnabled.HasValue) config.AgentFlowEnabled = request.AgentFlowEnabled.Value;
 
         // Agent Designer fields
@@ -115,6 +116,7 @@ public class AppConfigurationService : IAppConfigurationService
         NotificationEmail = config.NotificationEmail,
         BlobPollIntervalSeconds = config.BlobPollIntervalSeconds,
         MaxRetryCount = config.MaxRetryCount,
+        AutoRetryIntervalMinutes = config.AutoRetryIntervalMinutes,
         AgentFlowEnabled = config.AgentFlowEnabled,
         // Agent Designer
         BlobEnabled             = config.BlobEnabled,

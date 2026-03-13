@@ -239,6 +239,12 @@ using (var scope = app.Services.CreateScope())
                 table: "AppConfigurations", column: "SqlTargetTable",          definition: "TEXT NULL");
             await EnsureSqliteColumnAsync(db, startupLogger,
                 table: "AppConfigurations", column: "SqlColumnMappingJson",    definition: "TEXT NULL");
+
+            // Auto-retry fields (added in 20260313000000_AddAutoRetryFields)
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "AppConfigurations", column: "AutoRetryIntervalMinutes", definition: "INTEGER NOT NULL DEFAULT 30");
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "BlobWatcherJobs",   column: "RetryAfterUtc",           definition: "TEXT NULL");
         }
     }
     catch (Exception ex)

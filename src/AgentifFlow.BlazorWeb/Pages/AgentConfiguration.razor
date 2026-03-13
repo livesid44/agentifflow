@@ -57,6 +57,14 @@ else
                                  HelperText="Maximum number of automatic retry attempts for failed SQL inserts."
                                  Variant="Variant.Outlined" FullWidth="true" />
             </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField @bind-Value="_autoRetryIntervalMinutes"
+                                 Label="Auto-Retry Interval (minutes)"
+                                 Placeholder="30"
+                                 Min="0" Max="1440"
+                                 HelperText="Minutes to wait before automatically retrying a failed job without an email reply. Set to 0 to disable auto-retry."
+                                 Variant="Variant.Outlined" FullWidth="true" />
+            </MudItem>
             <MudItem xs="12">
                 <MudTextField @bind-Value="_notificationEmail"
                               Label="Notification Email"
@@ -104,6 +112,7 @@ else
     private bool   _agentFlowEnabled;
     private int    _pollInterval = 60;
     private int    _maxRetries   = 3;
+    private int    _autoRetryIntervalMinutes = 30;
     private string _notificationEmail = "";
 
     private bool _loading = true;
@@ -122,6 +131,7 @@ else
                 _agentFlowEnabled  = config.AgentFlowEnabled;
                 _pollInterval      = config.BlobPollIntervalSeconds > 0 ? config.BlobPollIntervalSeconds : 60;
                 _maxRetries        = config.MaxRetryCount > 0 ? config.MaxRetryCount : 3;
+                _autoRetryIntervalMinutes = config.AutoRetryIntervalMinutes >= 0 ? config.AutoRetryIntervalMinutes : 30;
                 _notificationEmail = config.NotificationEmail ?? "";
                 if (config.UpdatedAt.HasValue)
                     _savedAt = config.UpdatedAt.Value.ToLocalTime().ToString();
@@ -157,6 +167,7 @@ else
                 AgentFlowEnabled        = _agentFlowEnabled,
                 BlobPollIntervalSeconds = _pollInterval,
                 MaxRetryCount           = _maxRetries,
+                AutoRetryIntervalMinutes = _autoRetryIntervalMinutes,
                 NotificationEmail       = _notificationEmail,
             };
 
