@@ -64,7 +64,7 @@ public class BlobWatcherBackgroundService : BackgroundService
                 {
                     _logger.LogWarning("Blob storage not fully configured — skipping blob poll.");
                     await SendBlobNotConfiguredNotificationAsync(
-                        scope.ServiceProvider, config, db, stoppingToken);
+                        scope.ServiceProvider, config, stoppingToken);
                 }
 
                 // ── 2. Inbox reply scan ───────────────────────────────────────
@@ -170,7 +170,7 @@ public class BlobWatcherBackgroundService : BackgroundService
         if (csvFilesDetected == 0 && retryJobs.Count == 0)
         {
             if (config.NotifyOnFileNotFound)
-                await SendNoFileNotificationAsync(services, config, db, ct);
+                await SendNoFileNotificationAsync(services, config, ct);
             else
                 _logger.LogDebug("No matching blobs found this cycle; NotifyOnFileNotFound is disabled.");
         }
@@ -187,23 +187,16 @@ public class BlobWatcherBackgroundService : BackgroundService
     private async Task SendNoFileNotificationAsync(
         IServiceProvider services,
         AppConfiguration config,
-        AgentifFlowDbContext db,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(config.NotificationEmail)) return;
 
-        // Only send ONE notification per empty-container event (idempotent)
-        bool alreadySent = await db.BlobWatcherJobs.AnyAsync(j =>
-            j.BlobName      == NoFileBlobName &&
-            j.ContainerName == config.BlobContainerName &&
-            (j.Status == BlobWatcherJobStatus.AwaitingApproval ||
-             j.Status == BlobWatcherJobStatus.ReplyReceived), ct);
-
-        if (alreadySent) return;
-
         var jobService  = services.GetRequiredService<IBlobWatcherJobService>();
         var mailService = services.GetRequiredService<IGraphMailService>();
 
+        // Create a fresh job record for this poll cycle so every "no file found"
+        // event is visible in the dashboard log — regardless of what happened in
+        // previous cycles.
         var job             = await jobService.CreateAsync(NoFileBlobName, config.BlobContainerName);
         var notificationRef = GenerateRef();
 
@@ -237,21 +230,15 @@ public class BlobWatcherBackgroundService : BackgroundService
     private async Task SendBlobNotConfiguredNotificationAsync(
         IServiceProvider services,
         AppConfiguration config,
-        AgentifFlowDbContext db,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(config.NotificationEmail)) return;
 
-        bool alreadySent = await db.BlobWatcherJobs.AnyAsync(j =>
-            j.BlobName == BlobNotConfiguredBlobName &&
-            (j.Status == BlobWatcherJobStatus.AwaitingApproval ||
-             j.Status == BlobWatcherJobStatus.ReplyReceived), ct);
-
-        if (alreadySent) return;
-
         var jobService  = services.GetRequiredService<IBlobWatcherJobService>();
         var mailService = services.GetRequiredService<IGraphMailService>();
 
+        // Create a fresh job record every cycle so every "blob not configured"
+        // event is visible in the dashboard log.
         var job             = await jobService.CreateAsync(BlobNotConfiguredBlobName, null);
         var notificationRef = GenerateRef();
 

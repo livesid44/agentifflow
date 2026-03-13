@@ -185,4 +185,38 @@ public class BlobWatcherJobServiceTests
 
         mockNotifications.Verify(n => n.NotifyJobUpdatedAsync(It.Is<BlobWatcherJobDto>(d => d.Status == "Completed")), Times.Once);
     }
+
+    /// <summary>
+    /// Each "file not found" poll cycle must create its own BlobWatcherJob record.
+    /// The sentinel blob name "[container-scan]" must never block re-creation — every
+    /// cycle that finds no file should produce a new job visible in the dashboard.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_NoFileSentinel_CreatesMultipleJobsAcrossCycles()
+    {
+        const string noFileSentinel = "[container-scan]";
+        const string container      = "uploads";
+
+        using var db = CreateDb(nameof(CreateAsync_NoFileSentinel_CreatesMultipleJobsAcrossCycles));
+        var svc = CreateSvc(db);
+
+        // Simulate three consecutive poll cycles each finding no file.
+        var job1 = await svc.CreateAsync(noFileSentinel, container);
+        await svc.UpdateStatusAsync(job1.Id, BlobWatcherJobStatus.AwaitingApproval);
+
+        var job2 = await svc.CreateAsync(noFileSentinel, container);
+        await svc.UpdateStatusAsync(job2.Id, BlobWatcherJobStatus.AwaitingApproval);
+
+        var job3 = await svc.CreateAsync(noFileSentinel, container);
+        await svc.UpdateStatusAsync(job3.Id, BlobWatcherJobStatus.AwaitingApproval);
+
+        // All three must have distinct IDs — one per cycle.
+        Assert.True(job1.Id > 0);
+        Assert.NotEqual(job1.Id, job2.Id);
+        Assert.NotEqual(job2.Id, job3.Id);
+
+        // All three must be visible in the GetAllAsync list.
+        var all = (await svc.GetAllAsync(limit: 100)).ToList();
+        Assert.Equal(3, all.Count(j => j.BlobName == noFileSentinel));
+    }
 }
