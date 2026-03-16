@@ -842,10 +842,26 @@ public class BlobWatcherBackgroundService : BackgroundService
             .Select(h => colMap.TryGetValue(h, out var mapped) ? mapped : h)
             .ToArray();
 
-        var tableName = !string.IsNullOrWhiteSpace(agentConfig.SqlTargetTable)
+        // Sanitize table and column names to prevent SQL injection.
+        // Auto-generated names already go through [^A-Za-z0-9_] regex. Configured
+        // names (e.g. "dbo.MyTable") may contain only letters, digits, underscores,
+        // dots and brackets — reject anything else.
+        var rawTableName = !string.IsNullOrWhiteSpace(agentConfig.SqlTargetTable)
             ? agentConfig.SqlTargetTable
             : System.Text.RegularExpressions.Regex
                 .Replace(System.IO.Path.GetFileNameWithoutExtension(blobName), @"[^A-Za-z0-9_]", "_");
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(rawTableName, @"^[\w\.\[\]]+$"))
+            throw new InvalidOperationException(
+                $"SqlTargetTable '{rawTableName}' contains characters that are not permitted. " +
+                "Use only letters, digits, underscores, dots, and brackets.");
+
+        // Safely quote the table name for use in DDL/DML.
+        // Supports schema-qualified names like "dbo.MyTable" or "[dbo].[MyTable]".
+        var tableName = rawTableName;
+
+        // Safely escape column identifiers: double any ']' inside bracket-quoted names.
+        string QuoteIdentifier(string name) => "[" + name.Replace("]", "]]") + "]";
 
         using var connection = new Microsoft.Data.SqlClient.SqlConnection(agentConfig.SqlConnectionString);
         await connection.OpenAsync();
@@ -853,13 +869,21 @@ public class BlobWatcherBackgroundService : BackgroundService
         // Create the table if it does not exist (simple schema based on mapped column names)
         if (string.IsNullOrWhiteSpace(agentConfig.SqlTargetTable))
         {
-            // Only auto-create tables that were derived from the file name (no schema prefix)
-            var createCols = string.Join(", ", sqlColumns.Select(h => $"[{h}] NVARCHAR(MAX)"));
-            var createSql  =
-                $"IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='{tableName}' AND xtype='U') " +
-                $"CREATE TABLE [{tableName}] ({createCols})";
-            using var createCmd = new Microsoft.Data.SqlClient.SqlCommand(createSql, connection);
-            await createCmd.ExecuteNonQueryAsync();
+            // Only auto-create tables derived from the file name (no schema prefix).
+            // tableName here was built only from [A-Za-z0-9_], so safe to bracket directly.
+            var quotedTable = QuoteIdentifier(tableName);
+            var createCols  = string.Join(", ", sqlColumns.Select(h => $"{QuoteIdentifier(h)} NVARCHAR(MAX)"));
+            using var existsCmd = new Microsoft.Data.SqlClient.SqlCommand(
+                "SELECT COUNT(*) FROM sysobjects WHERE name = @tbl AND xtype = 'U'", connection);
+            existsCmd.Parameters.AddWithValue("@tbl", tableName);
+            var existsResult = await existsCmd.ExecuteScalarAsync();
+            var exists = existsResult is not null && (int)existsResult > 0;
+            if (!exists)
+            {
+                var createSql = $"CREATE TABLE {quotedTable} ({createCols})";
+                using var createCmd = new Microsoft.Data.SqlClient.SqlCommand(createSql, connection);
+                await createCmd.ExecuteNonQueryAsync();
+            }
         }
 
         int inserted = 0;
@@ -867,7 +891,7 @@ public class BlobWatcherBackgroundService : BackgroundService
         {
             var cols      = SplitCsvLine(lines[i]);
             var paramList = string.Join(", ", sqlColumns.Select((_, idx) => $"@p{idx}"));
-            var colList   = string.Join(", ", sqlColumns.Select(h => $"[{h}]"));
+            var colList   = string.Join(", ", sqlColumns.Select(h => QuoteIdentifier(h)));
             var insertSql = $"INSERT INTO {tableName} ({colList}) VALUES ({paramList})";
 
             using var cmd = new Microsoft.Data.SqlClient.SqlCommand(insertSql, connection);

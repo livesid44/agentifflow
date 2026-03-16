@@ -25,6 +25,7 @@ public class Agent
     // ── Notifications ────────────────────────────────────────────────────────
 
     [MaxLength(300)]
+    [System.ComponentModel.DataAnnotations.EmailAddress]
     public string? NotificationEmail { get; set; }
 
     public bool NotifyOnSuccess { get; set; } = false;
@@ -33,7 +34,10 @@ public class Agent
 
     // ── Retry ────────────────────────────────────────────────────────────────
 
+    [System.ComponentModel.DataAnnotations.Range(0, 100)]
     public int MaxRetryCount { get; set; } = 3;
+
+    [System.ComponentModel.DataAnnotations.Range(0, 1440)]
     public int AutoRetryIntervalMinutes { get; set; } = 30;
 
     // ── SQL push ─────────────────────────────────────────────────────────────
