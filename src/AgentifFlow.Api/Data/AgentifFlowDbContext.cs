@@ -15,6 +15,7 @@ public class AgentifFlowDbContext : DbContext
     public DbSet<BlobWatcherJob> BlobWatcherJobs => Set<BlobWatcherJob>();
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<AgentFileTarget> AgentFileTargets => Set<AgentFileTarget>();
+    public DbSet<AgentSkill> AgentSkills => Set<AgentSkill>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -72,6 +73,18 @@ public class AgentifFlowDbContext : DbContext
 
             entity.HasOne(e => e.Agent)
                   .WithMany(a => a.FileTargets)
+                  .HasForeignKey(e => e.AgentId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AgentSkill>(entity =>
+        {
+            entity.ToTable("AgentSkills");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SkillType).IsRequired().HasMaxLength(50);
+
+            entity.HasOne(e => e.Agent)
+                  .WithMany(a => a.Skills)
                   .HasForeignKey(e => e.AgentId)
                   .OnDelete(DeleteBehavior.Cascade);
         });

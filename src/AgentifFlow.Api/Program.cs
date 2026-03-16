@@ -250,6 +250,18 @@ using (var scope = app.Services.CreateScope())
             // Multi-agent: BlobWatcherJobs.AgentId (added in 20260316000000_AddAgents)
             await EnsureSqliteColumnAsync(db, startupLogger,
                 table: "BlobWatcherJobs",   column: "AgentId",                 definition: "INTEGER NULL");
+
+            // Skills: AgentSkills table (added in 20260316010000_AddAgentSkills)
+            await EnsureSqliteTableAsync(db, startupLogger, "AgentSkills", @"
+                CREATE TABLE IF NOT EXISTS ""AgentSkills"" (
+                    ""Id""         INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    ""AgentId""    INTEGER NOT NULL,
+                    ""SkillType""  TEXT    NOT NULL DEFAULT '',
+                    ""IsEnabled""  INTEGER NOT NULL DEFAULT 1,
+                    ""ConfigJson"" TEXT    NULL,
+                    CONSTRAINT ""FK_AgentSkills_Agents"" FOREIGN KEY (""AgentId"")
+                        REFERENCES ""Agents"" (""Id"") ON DELETE CASCADE
+                );");
         }
     }
     catch (Exception ex)
@@ -321,6 +333,41 @@ static async Task EnsureSqliteColumnAsync(
                 column, table);
             cmd.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {definition}";
             await cmd.ExecuteNonQueryAsync();
+        }
+    }
+    finally
+    {
+        if (shouldClose) await conn.CloseAsync();
+    }
+}
+
+/// <summary>
+/// Ensures a SQLite table exists, creating it if absent.
+/// Uses CREATE TABLE IF NOT EXISTS so it is fully idempotent.
+/// </summary>
+static async Task EnsureSqliteTableAsync(
+    AgentifFlow.Api.Data.AgentifFlowDbContext db,
+    ILogger logger,
+    string tableName,
+    string createSql)
+{
+    var conn = db.Database.GetDbConnection();
+    var shouldClose = conn.State != System.Data.ConnectionState.Open;
+    if (shouldClose) await conn.OpenAsync();
+    try
+    {
+        using var checkCmd = conn.CreateCommand();
+        checkCmd.CommandText =
+            $"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='{tableName}'";
+        var exists = Convert.ToInt32(await checkCmd.ExecuteScalarAsync()) > 0;
+
+        if (!exists)
+        {
+            logger.LogWarning(
+                "Schema repair: table '{Table}' missing — creating it now.", tableName);
+            using var createCmd = conn.CreateCommand();
+            createCmd.CommandText = createSql;
+            await createCmd.ExecuteNonQueryAsync();
         }
     }
     finally

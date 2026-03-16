@@ -178,4 +178,124 @@ public class AgentServiceTests
         Assert.Single(enabled);
         Assert.Equal("Enabled", enabled[0].Name);
     }
+
+    // ── Skill tests ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetSkillsAsync_ReturnsEmpty_ForNewAgent()
+    {
+        using var db = CreateDb(nameof(GetSkillsAsync_ReturnsEmpty_ForNewAgent));
+        var svc = CreateSvc(db);
+
+        var agent = await svc.CreateAsync(new CreateAgentRequest { Name = "Agent1" });
+        var skills = await svc.GetSkillsAsync(agent.Id);
+
+        Assert.Empty(skills);
+    }
+
+    [Fact]
+    public async Task SetSkillsAsync_AssignsSkillsToAgent()
+    {
+        using var db = CreateDb(nameof(SetSkillsAsync_AssignsSkillsToAgent));
+        var svc = CreateSvc(db);
+
+        var agent = await svc.CreateAsync(new CreateAgentRequest { Name = "Agent2" });
+
+        var request = new SetSkillsRequest
+        {
+            Skills = new()
+            {
+                new AgentSkillEntry { SkillType = "FileMonitoring",  IsEnabled = true  },
+                new AgentSkillEntry { SkillType = "DataValidation",  IsEnabled = true  },
+                new AgentSkillEntry { SkillType = "SqlManagement",   IsEnabled = false },
+            }
+        };
+
+        var skills = await svc.SetSkillsAsync(agent.Id, request);
+
+        Assert.NotNull(skills);
+        Assert.Equal(3, skills!.Count);
+        Assert.Contains(skills, s => s.SkillType == "FileMonitoring" && s.IsEnabled);
+        Assert.Contains(skills, s => s.SkillType == "SqlManagement"  && !s.IsEnabled);
+    }
+
+    [Fact]
+    public async Task SetSkillsAsync_ReturnsNull_ForMissingAgent()
+    {
+        using var db = CreateDb(nameof(SetSkillsAsync_ReturnsNull_ForMissingAgent));
+        var svc = CreateSvc(db);
+
+        var result = await svc.SetSkillsAsync(999, new SetSkillsRequest());
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task SetSkillsAsync_ReplacesExistingSkills()
+    {
+        using var db = CreateDb(nameof(SetSkillsAsync_ReplacesExistingSkills));
+        var svc = CreateSvc(db);
+
+        var agent = await svc.CreateAsync(new CreateAgentRequest { Name = "Agent3" });
+
+        // First assignment: 2 skills
+        await svc.SetSkillsAsync(agent.Id, new SetSkillsRequest
+        {
+            Skills = new()
+            {
+                new AgentSkillEntry { SkillType = "EmailMonitoring", IsEnabled = true },
+                new AgentSkillEntry { SkillType = "FileMonitoring",  IsEnabled = true },
+            }
+        });
+
+        // Replace with single skill
+        var updated = await svc.SetSkillsAsync(agent.Id, new SetSkillsRequest
+        {
+            Skills = new()
+            {
+                new AgentSkillEntry { SkillType = "SqlManagement", IsEnabled = true },
+            }
+        });
+
+        Assert.NotNull(updated);
+        Assert.Single(updated!);
+        Assert.Equal("SqlManagement", updated[0].SkillType);
+    }
+
+    [Fact]
+    public async Task GetSkillCatalogue_ReturnsFourSkills()
+    {
+        using var db = CreateDb(nameof(GetSkillCatalogue_ReturnsFourSkills));
+        var svc = CreateSvc(db);
+
+        var catalogue = svc.GetSkillCatalogue().ToList();
+
+        Assert.Equal(4, catalogue.Count);
+        Assert.Contains(catalogue, s => s.Type == "EmailMonitoring");
+        Assert.Contains(catalogue, s => s.Type == "FileMonitoring");
+        Assert.Contains(catalogue, s => s.Type == "DataValidation");
+        Assert.Contains(catalogue, s => s.Type == "SqlManagement");
+    }
+
+    [Fact]
+    public async Task AgentDto_IncludesSkills_WhenLoaded()
+    {
+        using var db = CreateDb(nameof(AgentDto_IncludesSkills_WhenLoaded));
+        var svc = CreateSvc(db);
+
+        var agent = await svc.CreateAsync(new CreateAgentRequest { Name = "Agent4" });
+        await svc.SetSkillsAsync(agent.Id, new SetSkillsRequest
+        {
+            Skills = new()
+            {
+                new AgentSkillEntry { SkillType = "FileMonitoring", IsEnabled = true },
+            }
+        });
+
+        var loaded = await svc.GetByIdAsync(agent.Id);
+
+        Assert.NotNull(loaded);
+        Assert.Single(loaded!.Skills);
+        Assert.Equal("FileMonitoring", loaded.Skills[0].SkillType);
+    }
 }

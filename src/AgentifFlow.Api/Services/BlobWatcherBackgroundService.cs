@@ -658,7 +658,7 @@ public class BlobWatcherBackgroundService : BackgroundService
         }
 
         // ── 3. Insert into SQL ────────────────────────────────────────────────
-        if (agentConfig.SqlPushEnabled && !string.IsNullOrWhiteSpace(agentConfig.SqlConnectionString))
+        if (agentConfig.SqlManagementActive && !string.IsNullOrWhiteSpace(agentConfig.SqlConnectionString))
         {
             await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Inserting,
                 logEntry: $"Validation passed ({validationResult.RowCount} rows). Starting SQL insert.");
@@ -704,9 +704,9 @@ public class BlobWatcherBackgroundService : BackgroundService
         else
         {
             await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Inserting,
-                logEntry: agentConfig.SqlPushEnabled
+                logEntry: agentConfig.SqlManagementActive
                     ? $"Validation passed ({validationResult.RowCount} rows). SQL push skipped — connection string not configured."
-                    : $"Validation passed ({validationResult.RowCount} rows). SQL push is disabled.");
+                    : $"Validation passed ({validationResult.RowCount} rows). SQL Management skill is disabled for this agent.");
         }
 
         // ── 4. Archive rename ─────────────────────────────────────────────────
@@ -752,7 +752,7 @@ public class BlobWatcherBackgroundService : BackgroundService
                 $"[AgentifFlow] File Processed Successfully: {blobName}",
                 $"The AgentifFlow agent \"{agentConfig.AgentName}\" has successfully processed the file \"{blobName}\".\n\n" +
                 $"Container: {agentConfig.BlobContainerName}\n" +
-                (agentConfig.SqlPushEnabled ? $"Rows inserted: {(await jobService.GetByIdAsync(job.Id))?.RowsInserted ?? 0}\n" : "") +
+                (agentConfig.SqlManagementActive ? $"Rows inserted: {(await jobService.GetByIdAsync(job.Id))?.RowsInserted ?? 0}\n" : "") +
                 $"Processed at: {DateTime.UtcNow:u}",
                 $"success [{blobName}]");
         }
@@ -952,6 +952,8 @@ public class BlobWatcherBackgroundService : BackgroundService
     /// <summary>
     /// Captures all settings required to run a single agent's processing pipeline,
     /// whether derived from a named <see cref="Agent"/> or the legacy <see cref="AppConfiguration"/>.
+    /// When an agent has explicit <see cref="AgentSkill"/> records, those override the
+    /// monolithic flag properties (backward-compatible fallback for agents with no skills).
     /// </summary>
     private sealed record AgentRunConfig(
         int? AgentId,
@@ -969,8 +971,22 @@ public class BlobWatcherBackgroundService : BackgroundService
         string? BlobContainerName,
         string? BlobStorageConnectionString,
         string? BlobArchiveFilePattern,
-        bool BlobArchiveAppendDate)
+        bool BlobArchiveAppendDate,
+        // ── Skill flags (null = fall back to monolithic property) ──────────────
+        bool? SkillEmailMonitoring,
+        bool? SkillFileMonitoring,
+        bool? SkillDataValidation,
+        bool? SkillSqlManagement)
     {
+        /// <summary>True if File Monitoring is active (skill-aware, falls back to BlobEnabled / presence of targets).</summary>
+        public bool FileMonitoringActive  => SkillFileMonitoring  ?? true;
+        /// <summary>True if Data Validation is active (skill-aware, falls back to always-on when configured).</summary>
+        public bool DataValidationActive  => SkillDataValidation  ?? true;
+        /// <summary>True if SQL Management is active (skill-aware, falls back to monolithic SqlPushEnabled).</summary>
+        public bool SqlManagementActive   => SkillSqlManagement   ?? SqlPushEnabled;
+        /// <summary>True if Email Monitoring is active (skill-aware, falls back to always-on when mailbox configured).</summary>
+        public bool EmailMonitoringActive => SkillEmailMonitoring ?? true;
+
         public static AgentRunConfig FromAppConfig(AppConfiguration c) => new(
             AgentId:                  null,
             AgentName:                "Default",
@@ -987,26 +1003,47 @@ public class BlobWatcherBackgroundService : BackgroundService
             BlobContainerName:        c.BlobContainerName,
             BlobStorageConnectionString: c.BlobStorageConnectionString,
             BlobArchiveFilePattern:   c.BlobArchiveFilePattern,
-            BlobArchiveAppendDate:    c.BlobArchiveAppendDate
+            BlobArchiveAppendDate:    c.BlobArchiveAppendDate,
+            SkillEmailMonitoring:     null,
+            SkillFileMonitoring:      null,
+            SkillDataValidation:      null,
+            SkillSqlManagement:       null
         );
 
-        public static AgentRunConfig FromAgent(Agent a, AppConfiguration g) => new(
-            AgentId:                  a.Id,
-            AgentName:                a.Name,
-            NotificationEmail:        a.NotificationEmail ?? g.NotificationEmail,
-            NotifyOnSuccess:          a.NotifyOnSuccess,
-            NotifyOnFileNotFound:     a.NotifyOnFileNotFound,
-            NotifyOnDataIssue:        a.NotifyOnDataIssue,
-            MaxRetryCount:            a.MaxRetryCount,
-            AutoRetryIntervalMinutes: a.AutoRetryIntervalMinutes,
-            SqlPushEnabled:           a.SqlPushEnabled,
-            SqlConnectionString:      g.SqlConnectionString,
-            SqlTargetTable:           a.SqlTargetTable,
-            SqlColumnMappingJson:     a.SqlColumnMappingJson,
-            BlobContainerName:        a.BlobContainerName ?? g.BlobContainerName,
-            BlobStorageConnectionString: g.BlobStorageConnectionString,
-            BlobArchiveFilePattern:   a.BlobArchiveFilePattern ?? g.BlobArchiveFilePattern,
-            BlobArchiveAppendDate:    a.BlobArchiveAppendDate
-        );
+        public static AgentRunConfig FromAgent(Agent a, AppConfiguration g)
+        {
+            // When the agent has explicit skill assignments, resolve them.
+            bool? emailSkill = null, fileSkill = null, validSkill = null, sqlSkill = null;
+            if (a.Skills.Any())
+            {
+                emailSkill = a.Skills.Any(s => s.SkillType == Models.SkillType.EmailMonitoring.ToString() && s.IsEnabled);
+                fileSkill  = a.Skills.Any(s => s.SkillType == Models.SkillType.FileMonitoring.ToString()  && s.IsEnabled);
+                validSkill = a.Skills.Any(s => s.SkillType == Models.SkillType.DataValidation.ToString()  && s.IsEnabled);
+                sqlSkill   = a.Skills.Any(s => s.SkillType == Models.SkillType.SqlManagement.ToString()   && s.IsEnabled);
+            }
+
+            return new(
+                AgentId:                  a.Id,
+                AgentName:                a.Name,
+                NotificationEmail:        a.NotificationEmail ?? g.NotificationEmail,
+                NotifyOnSuccess:          a.NotifyOnSuccess,
+                NotifyOnFileNotFound:     a.NotifyOnFileNotFound,
+                NotifyOnDataIssue:        a.NotifyOnDataIssue,
+                MaxRetryCount:            a.MaxRetryCount,
+                AutoRetryIntervalMinutes: a.AutoRetryIntervalMinutes,
+                SqlPushEnabled:           a.SqlPushEnabled,
+                SqlConnectionString:      g.SqlConnectionString,
+                SqlTargetTable:           a.SqlTargetTable,
+                SqlColumnMappingJson:     a.SqlColumnMappingJson,
+                BlobContainerName:        a.BlobContainerName ?? g.BlobContainerName,
+                BlobStorageConnectionString: g.BlobStorageConnectionString,
+                BlobArchiveFilePattern:   a.BlobArchiveFilePattern ?? g.BlobArchiveFilePattern,
+                BlobArchiveAppendDate:    a.BlobArchiveAppendDate,
+                SkillEmailMonitoring:     emailSkill,
+                SkillFileMonitoring:      fileSkill,
+                SkillDataValidation:      validSkill,
+                SkillSqlManagement:       sqlSkill
+            );
+        }
     }
 }

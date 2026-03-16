@@ -1,6 +1,40 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace AgentifFlow.Api.Models;
+
+// ── Skill catalogue ────────────────────────────────────────────────────────
+
+/// <summary>The four discrete capabilities that can be assigned to any agent.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum SkillType
+{
+    /// <summary>Watches a Microsoft 365 mailbox for file-arrival notification emails.</summary>
+    EmailMonitoring,
+
+    /// <summary>Polls Azure Blob Storage containers for expected files (with per-file-target detection).</summary>
+    FileMonitoring,
+
+    /// <summary>Validates ingested CSV data against schema rules and reports errors.</summary>
+    DataValidation,
+
+    /// <summary>Pushes validated rows into a SQL Server target table.</summary>
+    SqlManagement,
+}
+
+/// <summary>Metadata describing a skill (shown in the Control Tower skills catalogue).</summary>
+public static class SkillCatalogue
+{
+    public static readonly IReadOnlyList<SkillInfo> All = new[]
+    {
+        new SkillInfo(SkillType.EmailMonitoring,  "Email Monitoring",  "Watches a Microsoft 365 mailbox for file-arrival notification emails and triggers the pipeline.",  "email",    "Microsoft.Outlook.com"),
+        new SkillInfo(SkillType.FileMonitoring,   "File Monitoring",   "Polls Azure Blob Storage for expected files. Sends alerts when required files are missing.",         "folder",   "Microsoft.Azure.Storage.Blobs"),
+        new SkillInfo(SkillType.DataValidation,   "Data Validation",   "Validates ingested CSV rows against configurable schema rules and flags bad data for review.",      "check_box","AgentifFlow.Validation"),
+        new SkillInfo(SkillType.SqlManagement,    "SQL Management",    "Pushes validated rows into a SQL Server target table, auto-creating the schema when needed.",       "storage",  "Microsoft.Data.SqlClient"),
+    };
+}
+
+public record SkillInfo(SkillType Type, string DisplayName, string Description, string Icon, string Provider);
 
 /// <summary>Represents a single configurable agent instance with its own file, SQL, and notification settings.</summary>
 public class Agent
@@ -62,7 +96,8 @@ public class Agent
     // ── Navigation ────────────────────────────────────────────────────────────
 
     public ICollection<AgentFileTarget> FileTargets { get; set; } = new List<AgentFileTarget>();
-    public ICollection<BlobWatcherJob> Jobs { get; set; } = new List<BlobWatcherJob>();
+    public ICollection<AgentSkill>      Skills      { get; set; } = new List<AgentSkill>();
+    public ICollection<BlobWatcherJob>  Jobs        { get; set; } = new List<BlobWatcherJob>();
 }
 
 /// <summary>A single file that an agent should look for in blob storage each poll cycle.</summary>
@@ -86,7 +121,25 @@ public class AgentFileTarget
     public Agent Agent { get; set; } = null!;
 }
 
-// ── DTOs ─────────────────────────────────────────────────────────────────────
+/// <summary>Links an agent to a skill and stores optional per-skill configuration.</summary>
+public class AgentSkill
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int AgentId { get; set; }
+
+    /// <summary>The type of skill; stored as a string for readability in SQLite.</summary>
+    [Required, MaxLength(50)]
+    public string SkillType { get; set; } = string.Empty;
+
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>Optional JSON bag for per-skill configuration (e.g. custom mailbox for EmailMonitoring).</summary>
+    public string? ConfigJson { get; set; }
+
+    public Agent Agent { get; set; } = null!;
+}
 
 public class AgentDto
 {
@@ -109,6 +162,7 @@ public class AgentDto
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public List<AgentFileTargetDto> FileTargets { get; set; } = new();
+    public List<AgentSkillDto> Skills { get; set; } = new();
     // ── Aggregated job stats ──────────────────────────────────────────────────
     public int JobsCompleted { get; set; }
     public int JobsInProgress { get; set; }
@@ -206,4 +260,38 @@ public class AgentFileTargetRequest
 
     public bool AppendDate { get; set; } = true;
     public bool IsRequired { get; set; } = true;
+}
+
+// ── Skill DTOs ────────────────────────────────────────────────────────────────
+
+public class AgentSkillDto
+{
+    public int Id { get; set; }
+    public int AgentId { get; set; }
+    public string SkillType { get; set; } = string.Empty;
+    public bool IsEnabled { get; set; }
+    public string? ConfigJson { get; set; }
+}
+
+/// <summary>Replaces all skills for an agent in a single PUT request.</summary>
+public class SetSkillsRequest
+{
+    public List<AgentSkillEntry> Skills { get; set; } = new();
+}
+
+public class AgentSkillEntry
+{
+    [Required, MaxLength(50)]
+    public string SkillType { get; set; } = string.Empty;
+    public bool IsEnabled { get; set; } = true;
+    public string? ConfigJson { get; set; }
+}
+
+public class SkillCatalogueDto
+{
+    public string Type { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Icon { get; set; } = string.Empty;
+    public string Provider { get; set; } = string.Empty;
 }

@@ -19,6 +19,7 @@ public class AgentService : IAgentService
     {
         var agents = await _db.Agents
             .Include(a => a.FileTargets)
+            .Include(a => a.Skills)
             .OrderBy(a => a.Name)
             .ToListAsync();
 
@@ -33,6 +34,7 @@ public class AgentService : IAgentService
     {
         var agent = await _db.Agents
             .Include(a => a.FileTargets)
+            .Include(a => a.Skills)
             .FirstOrDefaultAsync(a => a.Id == id);
 
         return agent is null ? null : await EnrichWithStatsAsync(agent);
@@ -133,8 +135,63 @@ public class AgentService : IAgentService
     {
         return await _db.Agents
             .Include(a => a.FileTargets)
+            .Include(a => a.Skills)
             .Where(a => a.IsEnabled)
             .ToListAsync();
+    }
+
+    // ── Skill operations ──────────────────────────────────────────────────────
+
+    public async Task<List<AgentSkillDto>> GetSkillsAsync(int agentId)
+    {
+        return await _db.AgentSkills
+            .Where(s => s.AgentId == agentId)
+            .Select(s => new AgentSkillDto
+            {
+                Id         = s.Id,
+                AgentId    = s.AgentId,
+                SkillType  = s.SkillType,
+                IsEnabled  = s.IsEnabled,
+                ConfigJson = s.ConfigJson,
+            })
+            .ToListAsync();
+    }
+
+    public async Task<List<AgentSkillDto>?> SetSkillsAsync(int agentId, SetSkillsRequest request)
+    {
+        var agentExists = await _db.Agents.AnyAsync(a => a.Id == agentId);
+        if (!agentExists) return null;
+
+        // Remove existing skills then replace atomically.
+        var existing = await _db.AgentSkills.Where(s => s.AgentId == agentId).ToListAsync();
+        _db.AgentSkills.RemoveRange(existing);
+
+        foreach (var entry in request.Skills)
+        {
+            _db.AgentSkills.Add(new AgentSkill
+            {
+                AgentId    = agentId,
+                SkillType  = entry.SkillType,
+                IsEnabled  = entry.IsEnabled,
+                ConfigJson = entry.ConfigJson,
+            });
+        }
+
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("Skills updated for Agent Id={Id} ({Count} skills)", agentId, request.Skills.Count);
+        return await GetSkillsAsync(agentId);
+    }
+
+    public IEnumerable<SkillCatalogueDto> GetSkillCatalogue()
+    {
+        return SkillCatalogue.All.Select(s => new SkillCatalogueDto
+        {
+            Type        = s.Type.ToString(),
+            DisplayName = s.DisplayName,
+            Description = s.Description,
+            Icon        = s.Icon,
+            Provider    = s.Provider,
+        });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -201,6 +258,14 @@ public class AgentService : IAgentService
             FilePattern = t.FilePattern,
             AppendDate  = t.AppendDate,
             IsRequired  = t.IsRequired,
+        }).ToList(),
+        Skills = a.Skills.Select(s => new AgentSkillDto
+        {
+            Id         = s.Id,
+            AgentId    = s.AgentId,
+            SkillType  = s.SkillType,
+            IsEnabled  = s.IsEnabled,
+            ConfigJson = s.ConfigJson,
         }).ToList(),
     };
 }

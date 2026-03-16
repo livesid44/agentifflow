@@ -1,5 +1,47 @@
 namespace AgentifFlow.BlazorWeb.Models;
 
+// ── Skill types ──────────────────────────────────────────────────────────────
+
+public enum SkillType
+{
+    EmailMonitoring,
+    FileMonitoring,
+    DataValidation,
+    SqlManagement,
+}
+
+public class SkillCatalogueDto
+{
+    public string Type        { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Icon        { get; set; } = string.Empty;
+    public string Provider    { get; set; } = string.Empty;
+}
+
+public class AgentSkillDto
+{
+    public int     Id         { get; set; }
+    public int     AgentId    { get; set; }
+    public string  SkillType  { get; set; } = string.Empty;
+    public bool    IsEnabled  { get; set; }
+    public string? ConfigJson { get; set; }
+}
+
+public class SetSkillsRequest
+{
+    public List<AgentSkillEntry> Skills { get; set; } = new();
+}
+
+public class AgentSkillEntry
+{
+    public string  SkillType  { get; set; } = string.Empty;
+    public bool    IsEnabled  { get; set; } = true;
+    public string? ConfigJson { get; set; }
+}
+
+// ── Agent DTOs ────────────────────────────────────────────────────────────────
+
 public class AgentDto
 {
     public int Id { get; set; }
@@ -21,6 +63,7 @@ public class AgentDto
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public List<AgentFileTargetDto> FileTargets { get; set; } = new();
+    public List<AgentSkillDto>      Skills      { get; set; } = new();
     public int JobsCompleted { get; set; }
     public int JobsInProgress { get; set; }
     public int JobsFailed { get; set; }
@@ -83,3 +126,4 @@ public class AgentFileTargetRequest
     public bool AppendDate { get; set; } = true;
     public bool IsRequired { get; set; } = true;
 }
+

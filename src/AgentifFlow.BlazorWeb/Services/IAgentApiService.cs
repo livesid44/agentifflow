@@ -10,4 +10,8 @@ public interface IAgentApiService
     Task<AgentDto?> UpdateAsync(int id, UpdateAgentRequest request);
     Task<AgentDto?> SetEnabledAsync(int id, bool enabled);
     Task<bool> DeleteAsync(int id);
+
+    Task<List<SkillCatalogueDto>> GetSkillCatalogueAsync();
+    Task<List<AgentSkillDto>> GetSkillsAsync(int agentId);
+    Task<List<AgentSkillDto>?> SetSkillsAsync(int agentId, SetSkillsRequest request);
 }

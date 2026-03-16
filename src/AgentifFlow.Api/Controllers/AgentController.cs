@@ -83,6 +83,40 @@ public class AgentController : ControllerBase
         if (!deleted) return NotFound();
         return NoContent();
     }
-}
 
+    // ── Skill endpoints ───────────────────────────────────────────────────────
+
+    /// <summary>Returns the skills catalogue (all 4 skill types with metadata).</summary>
+    [HttpGet("skills/catalogue")]
+    [ProducesResponseType(typeof(IEnumerable<SkillCatalogueDto>), StatusCodes.Status200OK)]
+    public IActionResult GetSkillCatalogue()
+    {
+        return Ok(_agentService.GetSkillCatalogue());
+    }
+
+    /// <summary>Returns all skills assigned to an agent.</summary>
+    [HttpGet("{id:int}/skills")]
+    [ProducesResponseType(typeof(List<AgentSkillDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSkills(int id)
+    {
+        var agentExists = await _agentService.GetByIdAsync(id);
+        if (agentExists is null) return NotFound();
+        var skills = await _agentService.GetSkillsAsync(id);
+        return Ok(skills);
+    }
+
+    /// <summary>Replaces all skills for an agent in a single atomic operation.</summary>
+    [HttpPut("{id:int}/skills")]
+    [ProducesResponseType(typeof(List<AgentSkillDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SetSkills(int id, [FromBody] SetSkillsRequest request)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+        var skills = await _agentService.SetSkillsAsync(id, request);
+        if (skills is null) return NotFound();
+        return Ok(skills);
+    }
+}
 public record SetEnabledRequest(bool IsEnabled);
