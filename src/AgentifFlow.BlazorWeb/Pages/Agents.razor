@@ -8,7 +8,7 @@
 
 <!-- ── Page header ──────────────────────────────────────────────────────────── -->
 <MudText Typo="Typo.h5" Class="mb-1" Style="font-weight:700; letter-spacing:-0.5px;">
-    <MudIcon Icon="@Icons.Material.Outlined.Hub" Class="mr-2" Style="vertical-align:middle;" />
+    <MudIcon Icon="@Icons.Material.Outlined.AccountTree" Class="mr-2" Style="vertical-align:middle;" />
     Control Tower
 </MudText>
 <MudText Typo="Typo.body2" Class="mb-6" Style="color:var(--mud-palette-text-secondary);">
@@ -19,7 +19,7 @@
 <MudGrid Spacing="3" Class="mb-6">
     <MudItem xs="6" sm="3">
         <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
-            <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Color="Color.Primary" Size="Size.Large" />
+            <MudIcon Icon="@Icons.Material.Outlined.ManageAccounts" Color="Color.Primary" Size="Size.Large" />
             <MudText Typo="Typo.h4" Style="font-weight:700;">@_agents.Count</MudText>
             <MudText Typo="Typo.caption">Total Agents</MudText>
         </MudPaper>
@@ -33,14 +33,14 @@
     </MudItem>
     <MudItem xs="6" sm="3">
         <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
-            <MudIcon Icon="@Icons.Material.Outlined.Extension" Color="Color.Secondary" Size="Size.Large" />
+            <MudIcon Icon="@Icons.Material.Outlined.Widgets" Color="Color.Secondary" Size="Size.Large" />
             <MudText Typo="Typo.h4" Style="font-weight:700;">@_catalogue.Count</MudText>
             <MudText Typo="Typo.caption">Available Skills</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="3">
         <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
-            <MudIcon Icon="@Icons.Material.Outlined.ErrorOutline" Color="Color.Error" Size="Size.Large" />
+            <MudIcon Icon="@Icons.Material.Outlined.ReportProblem" Color="Color.Error" Size="Size.Large" />
             <MudText Typo="Typo.h4" Style="font-weight:700;">@_agents.Sum(a => a.JobsFailed)</MudText>
             <MudText Typo="Typo.caption">Jobs Failed</MudText>
         </MudPaper>
@@ -51,7 +51,7 @@
 <!-- SKILLS CATALOGUE                                                            -->
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight:700; letter-spacing:-0.3px;">
-    <MudIcon Icon="@Icons.Material.Outlined.Extension" Class="mr-2" Style="vertical-align:middle;" />
+    <MudIcon Icon="@Icons.Material.Outlined.Widgets" Class="mr-2" Style="vertical-align:middle;" />
     Available Skills
 </MudText>
 <MudText Typo="Typo.body2" Class="mb-4" Style="color:var(--mud-palette-text-secondary);">
@@ -87,17 +87,17 @@
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <div class="d-flex align-center gap-3 mb-4 flex-wrap">
     <MudText Typo="Typo.h6" Style="font-weight:700; letter-spacing:-0.3px;">
-        <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Class="mr-2" Style="vertical-align:middle;" />
+        <MudIcon Icon="@Icons.Material.Outlined.ManageAccounts" Class="mr-2" Style="vertical-align:middle;" />
         Agents
     </MudText>
     <MudSpacer />
     <MudButton Variant="Variant.Filled" Color="Color.Primary"
-               StartIcon="@Icons.Material.Filled.Add"
+               StartIcon="@Icons.Material.Outlined.AddCircleOutline"
                OnClick="OpenCreateDialog">
         New Agent
     </MudButton>
     <MudButton Variant="Variant.Outlined" Color="Color.Default"
-               StartIcon="@Icons.Material.Filled.Refresh"
+               StartIcon="@Icons.Material.Outlined.Refresh"
                OnClick="LoadAllAsync"
                Disabled="@_loading">
         Refresh
@@ -126,7 +126,7 @@ else
                     <MudCardHeader>
                         <CardHeaderAvatar>
                             <MudAvatar Color="@(agent.IsEnabled ? Color.Primary : Color.Default)">
-                                <MudIcon Icon="@Icons.Material.Outlined.SmartToy" />
+                                <MudIcon Icon="@Icons.Material.Outlined.ManageAccounts" />
                             </MudAvatar>
                         </CardHeaderAvatar>
                         <CardHeaderContent>
@@ -219,7 +219,7 @@ else
                             @foreach (var t in agent.FileTargets.Take(3))
                             {
                                 <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
-                                    <MudIcon Icon="@(t.IsRequired ? Icons.Material.Outlined.Warning : Icons.Material.Outlined.InsertDriveFile)"
+                                    <MudIcon Icon="@(t.IsRequired ? Icons.Material.Outlined.NotificationImportant : Icons.Material.Outlined.InsertDriveFile)"
                                              Size="Size.Small" Style="vertical-align:middle;" />
                                     @BuildExpectedName(t)
                                 </MudText>
@@ -236,22 +236,22 @@ else
                     <!-- ── Actions ──────────────────────────────────── -->
                     <MudCardActions>
                         <MudTooltip Text="Manage skills">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Extension"
+                            <MudIconButton Icon="@Icons.Material.Outlined.Widgets"
                                            Color="Color.Secondary"
                                            OnClick="() => OpenSkillsDialog(agent)" />
                         </MudTooltip>
                         <MudTooltip Text="Edit agent settings">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                            <MudIconButton Icon="@Icons.Material.Outlined.EditNote"
                                            Color="Color.Primary"
                                            OnClick="() => OpenEditDialog(agent)" />
                         </MudTooltip>
                         <MudTooltip Text="@(agent.IsEnabled ? "Disable agent" : "Enable agent")">
-                            <MudIconButton Icon="@(agent.IsEnabled ? Icons.Material.Outlined.PauseCircle : Icons.Material.Outlined.PlayCircle)"
+                            <MudIconButton Icon="@(agent.IsEnabled ? Icons.Material.Outlined.PauseCircleOutline : Icons.Material.Outlined.PlayCircleOutline)"
                                            Color="@(agent.IsEnabled ? Color.Warning : Color.Success)"
                                            OnClick="() => ToggleEnabledAsync(agent)" />
                         </MudTooltip>
                         <MudTooltip Text="Delete agent">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                            <MudIconButton Icon="@Icons.Material.Outlined.DeleteOutline"
                                            Color="Color.Error"
                                            OnClick="() => DeleteAgentAsync(agent)" />
                         </MudTooltip>
@@ -267,7 +267,7 @@ else
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <MudDialog @bind-Visible="_dialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
     <TitleContent>
-        <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Class="mr-2" Style="vertical-align:middle;" />
+        <MudIcon Icon="@Icons.Material.Outlined.ManageAccounts" Class="mr-2" Style="vertical-align:middle;" />
         @(_editingAgent is null ? "New Agent" : $"Edit — {_editingAgent.Name}")
     </TitleContent>
     <DialogContent>
@@ -281,7 +281,7 @@ else
                         <MudItem xs="12">
                             <MudTextField @bind-Value="_form.Name" Label="Agent Name" Required="true"
                                           Variant="Variant.Outlined" FullWidth="true"
-                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.SmartToy" />
+                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.ManageAccounts" />
                         </MudItem>
                         <MudItem xs="12">
                             <MudTextField @bind-Value="_form.Description" Label="Description" Lines="2"
@@ -290,7 +290,7 @@ else
                         <MudItem xs="12" sm="6">
                             <MudTextField @bind-Value="_form.BlobContainerName" Label="Blob Container (optional)"
                                           Placeholder="inherits global setting" Variant="Variant.Outlined" FullWidth="true"
-                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.CloudDownload" />
+                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.CloudQueue" />
                         </MudItem>
                         <MudItem xs="12" sm="6" Class="d-flex align-center">
                             <MudSwitch @bind-Value="_form.IsEnabled" Color="Color.Primary" Label="Agent Enabled" />
@@ -304,7 +304,7 @@ else
                         <MudText Typo="Typo.subtitle2" Style="font-weight:600;">
                             Files to watch each poll cycle
                         </MudText>
-                        <MudButton StartIcon="@Icons.Material.Filled.AddCircle" Color="Color.Primary"
+                        <MudButton StartIcon="@Icons.Material.Outlined.AddCircleOutline" Color="Color.Primary"
                                    Variant="Variant.Outlined" Size="Size.Small" OnClick="AddFileTarget">
                             Add Target
                         </MudButton>
@@ -333,7 +333,7 @@ else
                                     </MudText>
                                 </MudItem>
                                 <MudItem xs="12" sm="1" Class="d-flex justify-end">
-                                    <MudIconButton Icon="@Icons.Material.Filled.RemoveCircle" Color="Color.Error"
+                                    <MudIconButton Icon="@Icons.Material.Outlined.RemoveCircleOutline" Color="Color.Error"
                                                    Size="Size.Small" OnClick="() => RemoveFileTarget(idx)" />
                                 </MudItem>
                             </MudGrid>
@@ -381,7 +381,7 @@ else
                         <MudItem xs="12">
                             <MudTextField @bind-Value="_form.BlobArchiveFilePattern" Label="Archive File Pattern"
                                           Placeholder="e.g. archive/daily_report" Variant="Variant.Outlined" FullWidth="true"
-                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Archive" />
+                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Inventory2" />
                         </MudItem>
                         <MudItem xs="12" sm="4" Class="d-flex align-center">
                             <MudSwitch @bind-Value="_form.BlobArchiveAppendDate" Color="Color.Secondary" Label="Append Date to Archive" />
@@ -412,7 +412,7 @@ else
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <MudDialog @bind-Visible="_skillsDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
     <TitleContent>
-        <MudIcon Icon="@Icons.Material.Outlined.Extension" Class="mr-2" Style="vertical-align:middle;" />
+        <MudIcon Icon="@Icons.Material.Outlined.Widgets" Class="mr-2" Style="vertical-align:middle;" />
         Skills — @(_skillsAgent?.Name)
     </TitleContent>
     <DialogContent>
@@ -504,11 +504,11 @@ else
 
     private static string SkillIcon(string skillType) => skillType switch
     {
-        "EmailMonitoring" => Icons.Material.Outlined.Email,
-        "FileMonitoring"  => Icons.Material.Outlined.Folder,
-        "DataValidation"  => Icons.Material.Outlined.CheckBox,
-        "SqlManagement"   => Icons.Material.Outlined.Storage,
-        _                 => Icons.Material.Outlined.Extension,
+        "EmailMonitoring" => Icons.Material.Outlined.MarkEmailUnread,
+        "FileMonitoring"  => Icons.Material.Outlined.FolderOpen,
+        "DataValidation"  => Icons.Material.Outlined.FactCheck,
+        "SqlManagement"   => Icons.Material.Outlined.TableChart,
+        _                 => Icons.Material.Outlined.Widgets,
     };
 
     private static string SkillDisplayName(string skillType) => skillType switch

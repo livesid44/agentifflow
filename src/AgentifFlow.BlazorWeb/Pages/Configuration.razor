@@ -6,6 +6,7 @@
 <PageTitle>Integration Settings</PageTitle>
 
 <MudText Typo="Typo.h5" Class="mb-1" Style="font-weight:700; letter-spacing:-0.5px;">
+    <MudIcon Icon="@Icons.Material.Outlined.Tune" Class="mr-2" Style="vertical-align:middle;" />
     Integration Settings
 </MudText>
 <MudText Typo="Typo.body2" Class="mb-6" Style="color:var(--mud-palette-text-secondary);">
@@ -29,7 +30,7 @@ else
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
 
         <!-- ── Email / Graph API ────────────────────────────────────────────── -->
-        <MudTabPanel Text="Email / Graph API" Icon="@Icons.Material.Outlined.Email" Class="pa-6">
+        <MudTabPanel Text="Email / Graph API" Icon="@Icons.Material.Outlined.MailOutline" Class="pa-6">
             <MudGrid Spacing="3">
                 <MudItem xs="12">
                     <MudTextField @bind-Value="_graphTenantId"
@@ -88,7 +89,7 @@ else
                                    Size="Size.Medium"
                                    OnClick="HandleTestMailSend"
                                    Disabled="@isTesting"
-                                   StartIcon="@(isTesting ? null : Icons.Material.Outlined.MarkEmailRead)">
+                                   StartIcon="@(isTesting ? null : Icons.Material.Outlined.ForwardToInbox)">
                             @if (isTesting)
                             {
                                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"
@@ -113,7 +114,7 @@ else
         </MudTabPanel>
 
         <!-- ── Azure OpenAI ─────────────────────────────────────────────────── -->
-        <MudTabPanel Text="Azure OpenAI" Icon="@Icons.Material.Outlined.Psychology" Class="pa-6">
+        <MudTabPanel Text="Azure OpenAI" Icon="@Icons.Material.Outlined.AutoAwesome" Class="pa-6">
             <MudGrid Spacing="3">
                 <MudItem xs="12">
                     <MudTextField @bind-Value="_openAiEndpoint"
@@ -145,7 +146,7 @@ else
         </MudTabPanel>
 
         <!-- ── Azure Blob Storage ────────────────────────────────────────────── -->
-        <MudTabPanel Text="Blob Storage" Icon="@Icons.Material.Outlined.Cloud" Class="pa-6">
+        <MudTabPanel Text="Blob Storage" Icon="@Icons.Material.Outlined.CloudQueue" Class="pa-6">
             <MudGrid Spacing="3">
                 <MudItem xs="12">
                     <MudTextField @bind-Value="_blobConnStr"
@@ -169,7 +170,7 @@ else
         </MudTabPanel>
 
         <!-- ── SQL Database ──────────────────────────────────────────────────── -->
-        <MudTabPanel Text="SQL Database" Icon="@Icons.Material.Outlined.Storage" Class="pa-6">
+        <MudTabPanel Text="SQL Database" Icon="@Icons.Material.Outlined.TableChart" Class="pa-6">
             <MudGrid Spacing="3">
                 <MudItem xs="12">
                     <MudTextField @bind-Value="_sqlConnStr"
@@ -200,7 +201,7 @@ else
                    Size="Size.Large"
                    OnClick="HandleSave"
                    Disabled="@_saving"
-                   StartIcon="@(_saved ? Icons.Material.Filled.Check : Icons.Material.Filled.Save)">
+                   StartIcon="@(_saved ? Icons.Material.Outlined.CheckCircle : Icons.Material.Outlined.Save)">
             @if (_saving)
             {
                 <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"

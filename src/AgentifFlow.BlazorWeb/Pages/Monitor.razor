@@ -12,6 +12,7 @@
 <PageTitle>Dashboard</PageTitle>
 
 <MudText Typo="Typo.h5" Class="mb-1" Style="font-weight:700; letter-spacing:-0.5px;">
+    <MudIcon Icon="@Icons.Material.Outlined.SpaceDashboard" Class="mr-2" Style="vertical-align:middle;" />
     Dashboard
 </MudText>
 <MudText Typo="Typo.body2" Class="mb-6" Style="color:var(--mud-palette-text-secondary);">
@@ -22,28 +23,28 @@
 <MudGrid Spacing="3" Class="mb-6">
     <MudItem xs="6" sm="3">
         <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
-            <MudIcon Icon="@Icons.Material.Outlined.CheckCircle" Color="Color.Success" Size="Size.Large" />
+            <MudIcon Icon="@Icons.Material.Outlined.TaskAlt" Color="Color.Success" Size="Size.Large" />
             <MudText Typo="Typo.h4" Style="font-weight:700;">@_completed</MudText>
             <MudText Typo="Typo.caption">Completed</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="3">
         <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
-            <MudIcon Icon="@Icons.Material.Outlined.HourglassTop" Color="Color.Warning" Size="Size.Large" />
+            <MudIcon Icon="@Icons.Material.Outlined.Pending" Color="Color.Warning" Size="Size.Large" />
             <MudText Typo="Typo.h4" Style="font-weight:700;">@_inProgress</MudText>
             <MudText Typo="Typo.caption">In Progress</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="3">
         <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
-            <MudIcon Icon="@Icons.Material.Outlined.ErrorOutline" Color="Color.Error" Size="Size.Large" />
+            <MudIcon Icon="@Icons.Material.Outlined.ReportProblem" Color="Color.Error" Size="Size.Large" />
             <MudText Typo="Typo.h4" Style="font-weight:700;">@_failed</MudText>
             <MudText Typo="Typo.caption">Failed</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="3">
         <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
-            <MudIcon Icon="@Icons.Material.Outlined.MarkEmailUnread" Color="Color.Info" Size="Size.Large" />
+            <MudIcon Icon="@Icons.Material.Outlined.Approval" Color="Color.Info" Size="Size.Large" />
             <MudText Typo="Typo.h4" Style="font-weight:700;">@_awaitingApproval</MudText>
             <MudText Typo="Typo.caption">Awaiting Approval</MudText>
         </MudPaper>
@@ -53,7 +54,7 @@
 <!-- ── Toolbar ────────────────────────────────────────────────────────────── -->
 <div class="d-flex align-center gap-3 mb-4 flex-wrap">
     <MudButton Variant="Variant.Outlined" Color="Color.Primary"
-               StartIcon="@Icons.Material.Filled.Refresh"
+               StartIcon="@Icons.Material.Outlined.Refresh"
                OnClick="LoadJobsAsync" Disabled="@_loading">
         Refresh
     </MudButton>
@@ -74,7 +75,7 @@
     <!-- SignalR live indicator -->
     <MudTooltip Text="@(_hubConnected ? "Live updates active" : "Live updates disconnected — polling every 15 s")">
         <MudChip T="string"
-                 Icon="@(_hubConnected ? Icons.Material.Filled.Wifi : Icons.Material.Filled.WifiOff)"
+                 Icon="@(_hubConnected ? Icons.Material.Outlined.Sensors : Icons.Material.Outlined.SensorsOff)"
                  Color="@(_hubConnected ? Color.Success : Color.Warning)"
                  Size="Size.Small"
                  Text="@(_hubConnected ? "Live" : "Polling")" />
@@ -144,7 +145,7 @@ else
                 {
                     <MudTooltip Text="@(string.IsNullOrEmpty(context.UserReply) ? "Awaiting reply on this reference thread" : "Reply received — click Info to read it")">
                         <MudChip T="string" Text="@context.NotificationRef" Size="Size.Small"
-                                 Icon="@(string.IsNullOrEmpty(context.UserReply) ? Icons.Material.Filled.MarkEmailUnread : Icons.Material.Filled.MarkEmailRead)"
+                                 Icon="@(string.IsNullOrEmpty(context.UserReply) ? Icons.Material.Outlined.ScheduleSend : Icons.Material.Outlined.MarkEmailRead)"
                                  Color="@(string.IsNullOrEmpty(context.UserReply) ? Color.Warning : Color.Success)" />
                     </MudTooltip>
                 }
@@ -157,16 +158,16 @@ else
             <MudTd DataLabel="Rows Inserted">@(context.RowsInserted?.ToString() ?? "—")</MudTd>
             <MudTd DataLabel="Actions">
                 <MudStack Row="true" Spacing="1">
-                    <MudIconButton Icon="@Icons.Material.Filled.Info" Size="Size.Small"
+                    <MudIconButton Icon="@Icons.Material.Outlined.Info" Size="Size.Small"
                                    OnClick="() => ShowLog(context)"
                                    title="View log" />
                     @if (context.Status is "AwaitingApproval" or "ValidationFailed")
                     {
-                        <MudIconButton Icon="@Icons.Material.Filled.ThumbUp" Color="Color.Success"
+                        <MudIconButton Icon="@Icons.Material.Outlined.CheckCircleOutline" Color="Color.Success"
                                        Size="Size.Small"
                                        OnClick="() => ApproveAsync(context.Id)"
                                        title="Approve for retry" />
-                        <MudIconButton Icon="@Icons.Material.Filled.ThumbDown" Color="Color.Error"
+                        <MudIconButton Icon="@Icons.Material.Outlined.Cancel" Color="Color.Error"
                                        Size="Size.Small"
                                        OnClick="() => RejectAsync(context.Id)"
                                        title="Reject" />
@@ -214,7 +215,7 @@ else
 <MudDialog @bind-Visible="_logDialogVisible">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Article" Class="mr-2" />
+            <MudIcon Icon="@Icons.Material.Outlined.Assignment" Class="mr-2" />
             Job Log — @_selectedJob?.BlobName
         </MudText>
     </TitleContent>
@@ -509,14 +510,14 @@ else
     {
         var (color, icon) = status switch
         {
-            "Completed"        => (Color.Success,   Icons.Material.Filled.CheckCircle),
-            "Failed"           => (Color.Error,     Icons.Material.Filled.ErrorOutline),
-            "Rejected"         => (Color.Dark,      Icons.Material.Filled.Cancel),
-            "ValidationFailed" => (Color.Warning,   Icons.Material.Filled.WarningAmber),
-            "AwaitingApproval" => (Color.Info,      Icons.Material.Filled.MarkEmailUnread),
-            "ReplyReceived"    => (Color.Success,   Icons.Material.Filled.MarkEmailRead),
-            "Retrying"         => (Color.Secondary, Icons.Material.Filled.Replay),
-            _                  => (Color.Default,   Icons.Material.Filled.HourglassTop)
+            "Completed"        => (Color.Success,   Icons.Material.Outlined.TaskAlt),
+            "Failed"           => (Color.Error,     Icons.Material.Outlined.ReportProblem),
+            "Rejected"         => (Color.Dark,      Icons.Material.Outlined.DoDisturbAlt),
+            "ValidationFailed" => (Color.Warning,   Icons.Material.Outlined.FactCheck),
+            "AwaitingApproval" => (Color.Info,      Icons.Material.Outlined.Approval),
+            "ReplyReceived"    => (Color.Success,   Icons.Material.Outlined.MarkEmailRead),
+            "Retrying"         => (Color.Secondary, Icons.Material.Outlined.Autorenew),
+            _                  => (Color.Default,   Icons.Material.Outlined.Pending)
         };
         builder.OpenComponent<MudChip<string>>(0);
         builder.AddAttribute(1, "Text", status);

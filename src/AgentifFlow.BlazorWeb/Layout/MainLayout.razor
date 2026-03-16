@@ -1,17 +1,18 @@
 @inherits LayoutComponentBase
 
 <MudLayout>
-    <!-- ── TechM Orion–style top app bar — authenticated users only ────────── -->
+    <!-- ── Top app bar — authenticated users only ───────────────────────────── -->
     <AuthorizeView>
         <Authorized>
             <MudAppBar Elevation="2" Color="Color.Dark"
                        Style="background:#213e55 !important; border-bottom:1px solid rgba(255,255,255,0.10);">
-                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit"
-                               Edge="Edge.Start" OnClick="ToggleDrawer" />
+                <MudIconButton Icon="@Icons.Material.Outlined.Menu" Color="Color.Inherit"
+                               Edge="Edge.Start" OnClick="ToggleDrawer"
+                               aria-label="Toggle navigation" />
 
-                <!-- Logo -->
-                <div style="display:flex;align-items:center;gap:10px;">
-                    <img src="logo.png" style="height:34px;width:auto;" alt="Logo" />
+                <!-- Logo + product name -->
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <img src="logo.png" style="height:34px;width:auto;" alt="AgentifFlow" />
                 </div>
 
                 <MudSpacer />
@@ -20,43 +21,41 @@
         </Authorized>
     </AuthorizeView>
 
-    <!-- ── Sidebar (TechM teal — matches header) ─────────────────────────── -->
+    <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
     <AuthorizeView>
         <Authorized>
             <MudDrawer @bind-Open="_drawerOpen" Elevation="0" ClipMode="DrawerClipMode.Always"
                        Style="background:#213e55; border-right:1px solid rgba(255,255,255,0.10);">
-                <!-- Drawer header / brand repeat -->
+
                 <div style="padding:20px 16px 8px; border-bottom:1px solid rgba(255,255,255,0.08); margin-bottom:8px;">
                     <span style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.4);letter-spacing:1.5px;text-transform:uppercase;">
-                        Navigation
+                        Menu
                     </span>
                 </div>
+
                 <MudNavMenu Style="padding:0 8px;">
+
+                    <!-- Dashboard — real-time job monitoring -->
                     <MudNavLink Href="/" Match="NavLinkMatch.All"
-                                Icon="@Icons.Material.Outlined.Dashboard"
+                                Icon="@Icons.Material.Outlined.SpaceDashboard"
                                 Style="border-radius:20px;margin-bottom:4px;color:rgba(255,255,255,0.85);">
                         Dashboard
                     </MudNavLink>
+
+                    <!-- Control Tower — agents + skill assignment -->
                     <MudNavLink Href="/agents" Match="NavLinkMatch.Prefix"
-                                Icon="@Icons.Material.Outlined.Hub"
+                                Icon="@Icons.Material.Outlined.AccountTree"
                                 Style="border-radius:20px;margin-bottom:4px;color:rgba(255,255,255,0.85);">
-                        Agent Control Tower
+                        Control Tower
                     </MudNavLink>
+
+                    <!-- Integration Settings — Graph API, Blob, SQL, OpenAI config -->
                     <MudNavLink Href="/configuration" Match="NavLinkMatch.All"
-                                Icon="@Icons.Material.Outlined.Settings"
+                                Icon="@Icons.Material.Outlined.Tune"
                                 Style="border-radius:20px;margin-bottom:4px;color:rgba(255,255,255,0.85);">
                         Integration Settings
                     </MudNavLink>
-                    <MudNavLink Href="/agent-configuration" Match="NavLinkMatch.All"
-                                Icon="@Icons.Material.Outlined.SmartToy"
-                                Style="border-radius:20px;margin-bottom:4px;color:rgba(255,255,255,0.85);">
-                        Agent Configuration
-                    </MudNavLink>
-                    <MudNavLink Href="/agent-designer" Match="NavLinkMatch.All"
-                                Icon="@Icons.Material.Outlined.AccountTree"
-                                Style="border-radius:20px;margin-bottom:4px;color:rgba(255,255,255,0.85);">
-                        Agent Designer
-                    </MudNavLink>
+
                 </MudNavMenu>
             </MudDrawer>
         </Authorized>
@@ -70,7 +69,7 @@
         <!-- ── Footer ──────────────────────────────────────────────────────── -->
         <footer class="app-footer">
             <div class="app-footer-inner">
-                <img src="logo.png" style="height:20px;width:auto;" alt="Logo" />
+                <img src="logo.png" style="height:20px;width:auto;" alt="AgentifFlow" />
                 <span class="app-footer-text">
                     Powered by <strong>Tech Mahindra Ltd</strong>
                 </span>
