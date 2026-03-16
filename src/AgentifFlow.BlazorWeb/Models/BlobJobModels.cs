@@ -3,6 +3,7 @@ namespace AgentifFlow.BlazorWeb.Models;
 public class BlobWatcherJobDto
 {
     public int Id { get; set; }
+    public int? AgentId { get; set; }
     public string BlobName { get; set; } = string.Empty;
     public string? ContainerName { get; set; }
     public string Status { get; set; } = string.Empty;
@@ -13,6 +14,7 @@ public class BlobWatcherJobDto
     public DateTime DetectedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public DateTime? RetryAfterUtc { get; set; }
     /// <summary>Unique reference token embedded in the notification email subject.</summary>
     public string? NotificationRef { get; set; }
     /// <summary>Preview of the first reply received from the notification recipient.</summary>

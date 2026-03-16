@@ -1,0 +1,85 @@
+namespace AgentifFlow.BlazorWeb.Models;
+
+public class AgentDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public bool IsEnabled { get; set; }
+    public string? BlobContainerName { get; set; }
+    public string? NotificationEmail { get; set; }
+    public bool NotifyOnSuccess { get; set; }
+    public bool NotifyOnFileNotFound { get; set; }
+    public bool NotifyOnDataIssue { get; set; }
+    public int MaxRetryCount { get; set; }
+    public int AutoRetryIntervalMinutes { get; set; }
+    public bool SqlPushEnabled { get; set; }
+    public string? SqlTargetTable { get; set; }
+    public string? SqlColumnMappingJson { get; set; }
+    public string? BlobArchiveFilePattern { get; set; }
+    public bool BlobArchiveAppendDate { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public List<AgentFileTargetDto> FileTargets { get; set; } = new();
+    public int JobsCompleted { get; set; }
+    public int JobsInProgress { get; set; }
+    public int JobsFailed { get; set; }
+    public int JobsAwaitingApproval { get; set; }
+    public DateTime? LastActivity { get; set; }
+}
+
+public class AgentFileTargetDto
+{
+    public int Id { get; set; }
+    public int AgentId { get; set; }
+    public string FilePattern { get; set; } = string.Empty;
+    public bool AppendDate { get; set; }
+    public bool IsRequired { get; set; }
+}
+
+public class CreateAgentRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public bool IsEnabled { get; set; } = true;
+    public string? BlobContainerName { get; set; }
+    public string? NotificationEmail { get; set; }
+    public bool NotifyOnSuccess { get; set; } = false;
+    public bool NotifyOnFileNotFound { get; set; } = true;
+    public bool NotifyOnDataIssue { get; set; } = true;
+    public int MaxRetryCount { get; set; } = 3;
+    public int AutoRetryIntervalMinutes { get; set; } = 30;
+    public bool SqlPushEnabled { get; set; } = false;
+    public string? SqlTargetTable { get; set; }
+    public string? SqlColumnMappingJson { get; set; }
+    public string? BlobArchiveFilePattern { get; set; }
+    public bool BlobArchiveAppendDate { get; set; } = true;
+    public List<AgentFileTargetRequest> FileTargets { get; set; } = new();
+}
+
+public class UpdateAgentRequest
+{
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+    public bool? IsEnabled { get; set; }
+    public string? BlobContainerName { get; set; }
+    public string? NotificationEmail { get; set; }
+    public bool? NotifyOnSuccess { get; set; }
+    public bool? NotifyOnFileNotFound { get; set; }
+    public bool? NotifyOnDataIssue { get; set; }
+    public int? MaxRetryCount { get; set; }
+    public int? AutoRetryIntervalMinutes { get; set; }
+    public bool? SqlPushEnabled { get; set; }
+    public string? SqlTargetTable { get; set; }
+    public string? SqlColumnMappingJson { get; set; }
+    public string? BlobArchiveFilePattern { get; set; }
+    public bool? BlobArchiveAppendDate { get; set; }
+    public List<AgentFileTargetRequest>? FileTargets { get; set; }
+}
+
+public class AgentFileTargetRequest
+{
+    public string FilePattern { get; set; } = string.Empty;
+    public bool AppendDate { get; set; } = true;
+    public bool IsRequired { get; set; } = true;
+}

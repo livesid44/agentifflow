@@ -1,0 +1,478 @@
+@page "/agents"
+@attribute [Authorize]
+@inject IAgentApiService AgentService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Agent Control Tower</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-1" Style="font-weight:700; letter-spacing:-0.5px;">
+    <MudIcon Icon="@Icons.Material.Outlined.Hub" Class="mr-2" Style="vertical-align:middle;" />
+    Agent Control Tower
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-6" Style="color:var(--mud-palette-text-secondary);">
+    Create and manage agents. Each agent watches its own blob container and file targets.
+</MudText>
+
+<!-- ── Global stats bar ───────────────────────────────────────────────────── -->
+<MudGrid Spacing="3" Class="mb-6">
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Color="Color.Primary" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_agents.Count</MudText>
+            <MudText Typo="Typo.caption">Total Agents</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.CheckCircle" Color="Color.Success" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_agents.Count(a => a.IsEnabled)</MudText>
+            <MudText Typo="Typo.caption">Active</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.CheckCircle" Color="Color.Success" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_agents.Sum(a => a.JobsCompleted)</MudText>
+            <MudText Typo="Typo.caption">Jobs Completed</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.ErrorOutline" Color="Color.Error" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_agents.Sum(a => a.JobsFailed)</MudText>
+            <MudText Typo="Typo.caption">Jobs Failed</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- ── Toolbar ────────────────────────────────────────────────────────────── -->
+<div class="d-flex align-center gap-3 mb-4 flex-wrap">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenCreateDialog">
+        New Agent
+    </MudButton>
+    <MudButton Variant="Variant.Outlined" Color="Color.Default"
+               StartIcon="@Icons.Material.Filled.Refresh"
+               OnClick="LoadAgentsAsync"
+               Disabled="@_loading">
+        Refresh
+    </MudButton>
+</div>
+
+<!-- ── Agent cards ────────────────────────────────────────────────────────── -->
+@if (_loading)
+{
+    <div class="d-flex justify-center mt-8">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    </div>
+}
+else if (_agents.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">
+        No agents found. Click <strong>New Agent</strong> to create your first agent.
+    </MudAlert>
+}
+else
+{
+    <MudGrid Spacing="4">
+        @foreach (var agent in _agents)
+        {
+            <MudItem xs="12" sm="6" lg="4">
+                <MudCard Elevation="3" Class="@(agent.IsEnabled ? "agent-card-active" : "agent-card-inactive")" Style="height:100%;">
+                    <MudCardHeader>
+                        <CardHeaderAvatar>
+                            <MudAvatar Color="@(agent.IsEnabled ? Color.Primary : Color.Default)">
+                                <MudIcon Icon="@Icons.Material.Outlined.SmartToy" />
+                            </MudAvatar>
+                        </CardHeaderAvatar>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6" Style="font-weight:700;">@agent.Name</MudText>
+                            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
+                                @(agent.BlobContainerName ?? "inherits global container")
+                            </MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudChip T="string"
+                                     Color="@(agent.IsEnabled ? Color.Success : Color.Default)"
+                                     Size="Size.Small"
+                                     Text="@(agent.IsEnabled ? "Active" : "Disabled")" />
+                        </CardHeaderActions>
+                    </MudCardHeader>
+
+                    @if (!string.IsNullOrWhiteSpace(agent.Description))
+                    {
+                        <MudCardContent Class="pt-0 pb-2">
+                            <MudText Typo="Typo.body2" Style="color:var(--mud-palette-text-secondary);">
+                                @agent.Description
+                            </MudText>
+                        </MudCardContent>
+                    }
+
+                    <!-- ── Job stat chips ───────────────────────────── -->
+                    <MudCardContent Class="pt-1 pb-2">
+                        <div class="d-flex flex-wrap gap-1 mb-2">
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small"
+                                     Icon="@Icons.Material.Outlined.CheckCircle"
+                                     Text="@($"{agent.JobsCompleted} done")" />
+                            @if (agent.JobsInProgress > 0)
+                            {
+                                <MudChip T="string" Color="Color.Warning" Size="Size.Small"
+                                         Icon="@Icons.Material.Outlined.HourglassTop"
+                                         Text="@($"{agent.JobsInProgress} running")" />
+                            }
+                            @if (agent.JobsFailed > 0)
+                            {
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small"
+                                         Icon="@Icons.Material.Outlined.Error"
+                                         Text="@($"{agent.JobsFailed} failed")" />
+                            }
+                            @if (agent.JobsAwaitingApproval > 0)
+                            {
+                                <MudChip T="string" Color="Color.Info" Size="Size.Small"
+                                         Icon="@Icons.Material.Outlined.MarkEmailUnread"
+                                         Text="@($"{agent.JobsAwaitingApproval} awaiting")" />
+                            }
+                        </div>
+
+                        <!-- ── File targets ─────────────────────────── -->
+                        @if (agent.FileTargets.Count > 0)
+                        {
+                            <MudText Typo="Typo.caption" Style="font-weight:600;color:var(--mud-palette-text-secondary);">
+                                FILE TARGETS (@agent.FileTargets.Count)
+                            </MudText>
+                            @foreach (var t in agent.FileTargets)
+                            {
+                                <div class="d-flex align-center gap-1 mt-1">
+                                    <MudIcon Icon="@Icons.Material.Outlined.InsertDriveFile"
+                                             Size="Size.Small"
+                                             Color="@(t.IsRequired ? Color.Warning : Color.Default)" />
+                                    <MudText Typo="Typo.caption">
+                                        @BuildExpectedName(t)
+                                        @if (t.IsRequired)
+                                        {<MudChip T="string" Size="Size.Small" Color="Color.Warning" Text="required" />}
+                                    </MudText>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-disabled);">
+                                No file targets (scans all CSVs in container)
+                            </MudText>
+                        }
+
+                        @if (agent.LastActivity.HasValue)
+                        {
+                            <MudText Typo="Typo.caption" Class="mt-2" Style="color:var(--mud-palette-text-disabled);">
+                                Last activity: @agent.LastActivity.Value.ToLocalTime().ToString("dd MMM HH:mm")
+                            </MudText>
+                        }
+                    </MudCardContent>
+
+                    <!-- ── Actions ──────────────────────────────────── -->
+                    <MudCardActions>
+                        <MudTooltip Text="Edit agent">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                           Color="Color.Primary"
+                                           OnClick="() => OpenEditDialog(agent)" />
+                        </MudTooltip>
+                        <MudTooltip Text="@(agent.IsEnabled ? "Disable agent" : "Enable agent")">
+                            <MudIconButton Icon="@(agent.IsEnabled ? Icons.Material.Outlined.PauseCircle : Icons.Material.Outlined.PlayCircle)"
+                                           Color="@(agent.IsEnabled ? Color.Warning : Color.Success)"
+                                           OnClick="() => ToggleEnabledAsync(agent)" />
+                        </MudTooltip>
+                        <MudTooltip Text="Delete agent">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                           Color="Color.Error"
+                                           OnClick="() => DeleteAgentAsync(agent)" />
+                        </MudTooltip>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+<!-- ── Create / Edit Dialog ─────────────────────────────────────────────── -->
+<MudDialog @bind-Visible="_dialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_editingAgent == null ? "New Agent" : "Edit Agent")</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_form != null || true)
+        {
+            <MudGrid Spacing="2">
+                <!-- Name + Enabled ─────────────────────────────────── -->
+                <MudItem xs="12" sm="8">
+                    <MudTextField @bind-Value="_form!.Name" Label="Agent Name" Variant="Variant.Outlined"
+                                  Required="true" FullWidth="true" />
+                </MudItem>
+                <MudItem xs="12" sm="4" Class="d-flex align-center">
+                    <MudSwitch @bind-Value="_form!.IsEnabled" Color="Color.Primary"
+                               Label="@(_form!.IsEnabled ? "Enabled" : "Disabled")" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_form!.Description" Label="Description (optional)"
+                                  Variant="Variant.Outlined" FullWidth="true" Lines="2" />
+                </MudItem>
+
+                <!-- Blob ────────────────────────────────────────────── -->
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1" Style="font-weight:600;">Blob Storage</MudText>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_form!.BlobContainerName" Label="Container Name (leave blank to inherit global)"
+                                  Variant="Variant.Outlined" FullWidth="true"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Storage" />
+                </MudItem>
+
+                <!-- File Targets ─────────────────────────────────────── -->
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1" Style="font-weight:600;">
+                        File Targets
+                        <MudIconButton Icon="@Icons.Material.Filled.AddCircle" Color="Color.Primary"
+                                       Size="Size.Small" OnClick="AddFileTarget" />
+                    </MudText>
+                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
+                        Define specific files this agent should look for each poll cycle.
+                    </MudText>
+                </MudItem>
+                @for (int i = 0; i < _form!.FileTargets.Count; i++)
+                {
+                    var idx = i;
+                    var target = _form.FileTargets[idx];
+                    <MudItem xs="12">
+                        <div class="d-flex align-center gap-2">
+                            <MudTextField @bind-Value="target.FilePattern"
+                                          Label="File pattern (e.g. daily_report)"
+                                          Variant="Variant.Outlined" Class="flex-grow-1" />
+                            <MudTooltip Text="Append today's date (yyyyMMdd)">
+                                <MudSwitch @bind-Value="target.AppendDate" Color="Color.Secondary" Label="Date" />
+                            </MudTooltip>
+                            <MudTooltip Text="Alert if file is missing">
+                                <MudSwitch @bind-Value="target.IsRequired" Color="Color.Warning" Label="Req" />
+                            </MudTooltip>
+                            <MudIconButton Icon="@Icons.Material.Filled.RemoveCircle" Color="Color.Error"
+                                           Size="Size.Small" OnClick="() => RemoveFileTarget(idx)" />
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(target.FilePattern))
+                        {
+                            <MudText Typo="Typo.caption" Class="ml-2" Style="color:var(--mud-palette-text-secondary);">
+                                → @BuildPreview(target)
+                            </MudText>
+                        }
+                    </MudItem>
+                }
+
+                <!-- Notifications ────────────────────────────────────── -->
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-1" Style="font-weight:600;">Notifications</MudText>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_form!.NotificationEmail" Label="Notification Email"
+                                  Variant="Variant.Outlined" FullWidth="true"
+                                  InputType="InputType.Email"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Email" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSwitch @bind-Value="_form!.NotifyOnSuccess" Color="Color.Success" Label="Notify on success" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSwitch @bind-Value="_form!.NotifyOnFileNotFound" Color="Color.Warning" Label="Notify if file missing" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSwitch @bind-Value="_form!.NotifyOnDataIssue" Color="Color.Error" Label="Notify on data issue" />
+                </MudItem>
+
+                <!-- Retry ────────────────────────────────────────────── -->
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-1" Style="font-weight:600;">Retry Policy</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_form!.MaxRetryCount" Label="Max Retry Count"
+                                     Variant="Variant.Outlined" Min="0" Max="20" FullWidth="true" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_form!.AutoRetryIntervalMinutes" Label="Auto-Retry Interval (minutes)"
+                                     Variant="Variant.Outlined" Min="0" Max="1440" FullWidth="true" />
+                </MudItem>
+
+                <!-- SQL ──────────────────────────────────────────────── -->
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudSwitch @bind-Value="_form!.SqlPushEnabled" Color="Color.Primary" Label="Enable SQL push" />
+                </MudItem>
+                @if (_form!.SqlPushEnabled)
+                {
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_form!.SqlTargetTable" Label="Target Table (e.g. dbo.Imports)"
+                                      Variant="Variant.Outlined" FullWidth="true" />
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _dialogOpen = false">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAgentAsync" Disabled="@_saving">
+            @(_saving ? "Saving…" : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<AgentDto> _agents = new();
+    private bool _loading = true;
+
+    private bool _dialogOpen = false;
+    private bool _saving = false;
+    private AgentDto? _editingAgent;
+    private CreateAgentRequest? _form;
+
+    protected override async Task OnInitializedAsync()
+        => await LoadAgentsAsync();
+
+    private async Task LoadAgentsAsync()
+    {
+        _loading = true;
+        try   { _agents = await AgentService.GetAllAsync(); }
+        catch { Snackbar.Add("Failed to load agents.", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingAgent = null;
+        _form = new CreateAgentRequest();
+        _dialogOpen = true;
+    }
+
+    private void OpenEditDialog(AgentDto agent)
+    {
+        _editingAgent = agent;
+        _form = new CreateAgentRequest
+        {
+            Name                     = agent.Name,
+            Description              = agent.Description,
+            IsEnabled                = agent.IsEnabled,
+            BlobContainerName        = agent.BlobContainerName,
+            NotificationEmail        = agent.NotificationEmail,
+            NotifyOnSuccess          = agent.NotifyOnSuccess,
+            NotifyOnFileNotFound     = agent.NotifyOnFileNotFound,
+            NotifyOnDataIssue        = agent.NotifyOnDataIssue,
+            MaxRetryCount            = agent.MaxRetryCount,
+            AutoRetryIntervalMinutes = agent.AutoRetryIntervalMinutes,
+            SqlPushEnabled           = agent.SqlPushEnabled,
+            SqlTargetTable           = agent.SqlTargetTable,
+            SqlColumnMappingJson     = agent.SqlColumnMappingJson,
+            BlobArchiveFilePattern   = agent.BlobArchiveFilePattern,
+            BlobArchiveAppendDate    = agent.BlobArchiveAppendDate,
+            FileTargets = agent.FileTargets.Select(t => new AgentFileTargetRequest
+            {
+                FilePattern = t.FilePattern,
+                AppendDate  = t.AppendDate,
+                IsRequired  = t.IsRequired,
+            }).ToList(),
+        };
+        _dialogOpen = true;
+    }
+
+    private async Task SaveAgentAsync()
+    {
+        if (_form is null) return;
+
+        _saving = true;
+        try
+        {
+            if (_editingAgent is null)
+            {
+                var created = await AgentService.CreateAsync(_form);
+                if (created is not null)
+                {
+                    Snackbar.Add($"Agent '{created.Name}' created.", Severity.Success);
+                    _dialogOpen = false;
+                    await LoadAgentsAsync();
+                }
+                else Snackbar.Add("Failed to create agent.", Severity.Error);
+            }
+            else
+            {
+                var updated = await AgentService.UpdateAsync(_editingAgent.Id, new UpdateAgentRequest
+                {
+                    Name                     = _form.Name,
+                    Description              = _form.Description,
+                    IsEnabled                = _form.IsEnabled,
+                    BlobContainerName        = _form.BlobContainerName ?? "",
+                    NotificationEmail        = _form.NotificationEmail ?? "",
+                    NotifyOnSuccess          = _form.NotifyOnSuccess,
+                    NotifyOnFileNotFound     = _form.NotifyOnFileNotFound,
+                    NotifyOnDataIssue        = _form.NotifyOnDataIssue,
+                    MaxRetryCount            = _form.MaxRetryCount,
+                    AutoRetryIntervalMinutes = _form.AutoRetryIntervalMinutes,
+                    SqlPushEnabled           = _form.SqlPushEnabled,
+                    SqlTargetTable           = _form.SqlTargetTable ?? "",
+                    BlobArchiveFilePattern   = _form.BlobArchiveFilePattern ?? "",
+                    BlobArchiveAppendDate    = _form.BlobArchiveAppendDate,
+                    FileTargets              = _form.FileTargets,
+                });
+                if (updated is not null)
+                {
+                    Snackbar.Add($"Agent '{updated.Name}' saved.", Severity.Success);
+                    _dialogOpen = false;
+                    await LoadAgentsAsync();
+                }
+                else Snackbar.Add("Failed to save agent.", Severity.Error);
+            }
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task ToggleEnabledAsync(AgentDto agent)
+    {
+        var updated = await AgentService.SetEnabledAsync(agent.Id, !agent.IsEnabled);
+        if (updated is not null)
+        {
+            Snackbar.Add($"Agent '{agent.Name}' {(updated.IsEnabled ? "enabled" : "disabled")}.", Severity.Success);
+            await LoadAgentsAsync();
+        }
+        else Snackbar.Add("Failed to update agent status.", Severity.Error);
+    }
+
+    private async Task DeleteAgentAsync(AgentDto agent)
+    {
+        var confirm = await JS.InvokeAsync<bool>("confirm",
+            $"Permanently delete agent '{agent.Name}'? This cannot be undone.");
+        if (!confirm) return;
+
+        var ok = await AgentService.DeleteAsync(agent.Id);
+        if (ok)
+        {
+            Snackbar.Add($"Agent '{agent.Name}' deleted.", Severity.Success);
+            await LoadAgentsAsync();
+        }
+        else Snackbar.Add("Failed to delete agent.", Severity.Error);
+    }
+
+    private void AddFileTarget()
+        => _form?.FileTargets.Add(new AgentFileTargetRequest());
+
+    private void RemoveFileTarget(int idx)
+        => _form?.FileTargets.RemoveAt(idx);
+
+    private static string BuildPreview(AgentFileTargetRequest t)
+    {
+        if (string.IsNullOrWhiteSpace(t.FilePattern)) return "";
+        var baseName = t.FilePattern.TrimEnd('_');
+        return t.AppendDate ? $"{baseName}_yyyyMMdd.csv" : $"{baseName}.csv";
+    }
+
+    private static string BuildExpectedName(AgentFileTargetDto t)
+    {
+        var baseName = t.FilePattern.TrimEnd('_');
+        return t.AppendDate ? $"{baseName}_{DateTime.UtcNow:yyyyMMdd}.csv" : $"{baseName}.csv";
+    }
+}

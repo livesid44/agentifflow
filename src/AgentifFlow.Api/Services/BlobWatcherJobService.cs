@@ -38,12 +38,13 @@ public class BlobWatcherJobService : IBlobWatcherJobService
         return job is null ? null : ToDto(job);
     }
 
-    public async Task<BlobWatcherJob> CreateAsync(string blobName, string? containerName)
+    public async Task<BlobWatcherJob> CreateAsync(string blobName, string? containerName, int? agentId = null)
     {
         var job = new BlobWatcherJob
         {
             BlobName      = blobName,
             ContainerName = containerName,
+            AgentId       = agentId,
             Status        = BlobWatcherJobStatus.Detected,
             DetectedAt    = DateTime.UtcNow,
             UpdatedAt     = DateTime.UtcNow
@@ -162,6 +163,7 @@ public class BlobWatcherJobService : IBlobWatcherJobService
     private static BlobWatcherJobDto ToDto(BlobWatcherJob j) => new()
     {
         Id              = j.Id,
+        AgentId         = j.AgentId,
         BlobName        = j.BlobName,
         ContainerName   = j.ContainerName,
         Status          = j.Status.ToString(),

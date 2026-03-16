@@ -68,12 +68,20 @@ public class BlobWatcherJob
     /// </summary>
     [MaxLength(2000)]
     public string? UserReply { get; set; }
+
+    // ── Agent association ─────────────────────────────────────────────────────
+
+    /// <summary>The agent that owns this job, or <c>null</c> for legacy (single-config) jobs.</summary>
+    public int? AgentId { get; set; }
+
+    public Agent? Agent { get; set; }
 }
 
 /// <summary>DTO for returning BlobWatcherJob info to clients.</summary>
 public class BlobWatcherJobDto
 {
     public int Id { get; set; }
+    public int? AgentId { get; set; }
     public string BlobName { get; set; } = string.Empty;
     public string? ContainerName { get; set; }
     public string Status { get; set; } = string.Empty;

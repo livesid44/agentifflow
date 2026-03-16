@@ -13,6 +13,8 @@ public class AgentifFlowDbContext : DbContext
     public DbSet<AgentTask> AgentTasks => Set<AgentTask>();
     public DbSet<AppConfiguration> AppConfigurations => Set<AppConfiguration>();
     public DbSet<BlobWatcherJob> BlobWatcherJobs => Set<BlobWatcherJob>();
+    public DbSet<Agent> Agents => Set<Agent>();
+    public DbSet<AgentFileTarget> AgentFileTargets => Set<AgentFileTarget>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -47,6 +49,31 @@ public class AgentifFlowDbContext : DbContext
                   .HasConversion<string>()
                   .HasMaxLength(50);
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
+
+            entity.HasOne(e => e.Agent)
+                  .WithMany(a => a.Jobs)
+                  .HasForeignKey(e => e.AgentId)
+                  .IsRequired(false)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Agent>(entity =>
+        {
+            entity.ToTable("Agents");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<AgentFileTarget>(entity =>
+        {
+            entity.ToTable("AgentFileTargets");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FilePattern).IsRequired().HasMaxLength(300);
+
+            entity.HasOne(e => e.Agent)
+                  .WithMany(a => a.FileTargets)
+                  .HasForeignKey(e => e.AgentId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

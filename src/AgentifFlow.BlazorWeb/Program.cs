@@ -39,6 +39,10 @@ if (enableDevLogin)
     builder.Services.AddHttpClient<IBlobJobApiService, BlobJobApiService>(
         client => client.BaseAddress = new Uri(apiBaseUrl))
         .AddHttpMessageHandler<DevAuthHandler>();
+
+    builder.Services.AddHttpClient<IAgentApiService, AgentApiService>(
+        client => client.BaseAddress = new Uri(apiBaseUrl))
+        .AddHttpMessageHandler<DevAuthHandler>();
 }
 else
 {
@@ -62,6 +66,14 @@ else
                   scopes: [apiScope]));
 
     builder.Services.AddHttpClient<IBlobJobApiService, BlobJobApiService>(
+        client => client.BaseAddress = new Uri(apiBaseUrl))
+        .AddHttpMessageHandler(sp =>
+            sp.GetRequiredService<AuthorizationMessageHandler>()
+              .ConfigureHandler(
+                  authorizedUrls: [apiBaseUrl],
+                  scopes: [apiScope]));
+
+    builder.Services.AddHttpClient<IAgentApiService, AgentApiService>(
         client => client.BaseAddress = new Uri(apiBaseUrl))
         .AddHttpMessageHandler(sp =>
             sp.GetRequiredService<AuthorizationMessageHandler>()

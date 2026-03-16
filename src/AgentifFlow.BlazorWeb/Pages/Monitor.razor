@@ -2,6 +2,7 @@
 @page "/monitor"
 @attribute [Authorize]
 @inject IBlobJobApiService JobService
+@inject IAgentApiService AgentService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject IConfiguration Config
@@ -56,6 +57,20 @@
                OnClick="LoadJobsAsync" Disabled="@_loading">
         Refresh
     </MudButton>
+    <!-- Agent filter -->
+    @if (_agents.Count > 0)
+    {
+        <MudSelect T="int?" Value="_selectedAgentId" ValueChanged="OnAgentFilterChanged"
+                   Label="Filter by Agent" Variant="Variant.Outlined" Dense="true"
+                   Style="min-width:180px;" Clearable="true">
+            <MudSelectItem T="int?" Value="@((int?)null)">All Agents</MudSelectItem>
+            <MudSelectItem T="int?" Value="@((int?)-1)">Legacy (no agent)</MudSelectItem>
+            @foreach (var a in _agents)
+            {
+                <MudSelectItem T="int?" Value="@((int?)a.Id)">@a.Name</MudSelectItem>
+            }
+        </MudSelect>
+    }
     <!-- SignalR live indicator -->
     <MudTooltip Text="@(_hubConnected ? "Live updates active" : "Live updates disconnected — polling every 15 s")">
         <MudChip T="string"
@@ -93,10 +108,11 @@ else if (_jobs.Count == 0)
 else
 {
     <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight:700;">Agent Jobs</MudText>
-    <MudTable Items="_jobs" Hover="true" Dense="true" Striped="true"
+    <MudTable Items="_filteredJobs" Hover="true" Dense="true" Striped="true"
               SortLabel="Sort By" Elevation="2" Class="mb-8">
         <HeaderContent>
             <MudTh><MudTableSortLabel SortBy="new Func<BlobWatcherJobDto, object>(x => x.DetectedAt)">Detected</MudTableSortLabel></MudTh>
+            <MudTh>Agent</MudTh>
             <MudTh>Blob Name</MudTh>
             <MudTh>Container</MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<BlobWatcherJobDto, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
@@ -107,6 +123,17 @@ else
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Detected">@context.DetectedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+            <MudTd DataLabel="Agent">
+                @if (context.AgentId.HasValue)
+                {
+                    var agentName = _agents.FirstOrDefault(a => a.Id == context.AgentId.Value)?.Name ?? $"#{context.AgentId}";
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Text="@agentName" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-disabled);">Legacy</MudText>
+                }
+            </MudTd>
             <MudTd DataLabel="Blob Name">
                 <MudText Style="font-family:monospace; font-size:.85em;">@context.BlobName</MudText>
             </MudTd>
@@ -229,6 +256,12 @@ else
 
 @code {
     private List<BlobWatcherJobDto> _jobs = [];
+    private List<BlobWatcherJobDto> _filteredJobs => _selectedAgentId switch
+    {
+        null  => _jobs,
+        -1    => _jobs.Where(j => j.AgentId == null).ToList(),
+        { } id => _jobs.Where(j => j.AgentId == id).ToList(),
+    };
     private List<ActivityLogEntry> _activityLog = [];
     private bool _loading;
     private string? _error;
@@ -237,6 +270,10 @@ else
 
     private bool _logDialogVisible;
     private BlobWatcherJobDto? _selectedJob;
+
+    // Agent filter
+    private List<AgentDto> _agents = [];
+    private int? _selectedAgentId;
 
     // Summary counts
     private int _completed;
@@ -250,7 +287,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadJobsAsync();
+        await Task.WhenAll(LoadJobsAsync(), LoadAgentsAsync());
         await ConnectSignalRAsync();
 
         // Fallback polling — keeps data fresh if SignalR is disconnected.
@@ -362,6 +399,18 @@ else
         {
             _loading = false;
         }
+    }
+
+    private async Task LoadAgentsAsync()
+    {
+        try { _agents = await AgentService.GetAllAsync(); }
+        catch { /* non-critical — just hides the filter */ }
+    }
+
+    private void OnAgentFilterChanged(int? agentId)
+    {
+        _selectedAgentId = agentId;
+        StateHasChanged();
     }
 
     private void ComputeSummary()

@@ -6,7 +6,7 @@ public interface IBlobWatcherJobService
 {
     Task<IEnumerable<BlobWatcherJobDto>> GetAllAsync(int? limit = 50);
     Task<BlobWatcherJobDto?> GetByIdAsync(int id);
-    Task<BlobWatcherJob> CreateAsync(string blobName, string? containerName);
+    Task<BlobWatcherJob> CreateAsync(string blobName, string? containerName, int? agentId = null);
     Task<BlobWatcherJob?> UpdateStatusAsync(int id, BlobWatcherJobStatus status,
         string? errorMessage = null, string? logEntry = null, DateTime? retryAfterUtc = null);
     Task<BlobWatcherJob?> IncrementRetryAsync(int id);

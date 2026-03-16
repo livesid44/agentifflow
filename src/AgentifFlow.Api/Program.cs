@@ -96,6 +96,7 @@ builder.Services.AddScoped<ILlmService, LlmService>();
 builder.Services.AddScoped<IAgentTaskService, AgentTaskService>();
 builder.Services.AddScoped<IAppConfigurationService, AppConfigurationService>();
 builder.Services.AddScoped<IBlobWatcherJobService, BlobWatcherJobService>();
+builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<ICsvValidationService, CsvValidationService>();
 builder.Services.AddHostedService<BlobWatcherBackgroundService>();
 
@@ -245,6 +246,10 @@ using (var scope = app.Services.CreateScope())
                 table: "AppConfigurations", column: "AutoRetryIntervalMinutes", definition: "INTEGER NOT NULL DEFAULT 30");
             await EnsureSqliteColumnAsync(db, startupLogger,
                 table: "BlobWatcherJobs",   column: "RetryAfterUtc",           definition: "TEXT NULL");
+
+            // Multi-agent: BlobWatcherJobs.AgentId (added in 20260316000000_AddAgents)
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "BlobWatcherJobs",   column: "AgentId",                 definition: "INTEGER NULL");
         }
     }
     catch (Exception ex)

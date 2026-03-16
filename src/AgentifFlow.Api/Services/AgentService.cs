@@ -1,0 +1,206 @@
+using AgentifFlow.Api.Data;
+using AgentifFlow.Api.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace AgentifFlow.Api.Services;
+
+public class AgentService : IAgentService
+{
+    private readonly AgentifFlowDbContext _db;
+    private readonly ILogger<AgentService> _logger;
+
+    public AgentService(AgentifFlowDbContext db, ILogger<AgentService> logger)
+    {
+        _db     = db;
+        _logger = logger;
+    }
+
+    public async Task<IEnumerable<AgentDto>> GetAllAsync()
+    {
+        var agents = await _db.Agents
+            .Include(a => a.FileTargets)
+            .OrderBy(a => a.Name)
+            .ToListAsync();
+
+        var result = new List<AgentDto>(agents.Count);
+        foreach (var a in agents)
+            result.Add(await EnrichWithStatsAsync(a));
+
+        return result;
+    }
+
+    public async Task<AgentDto?> GetByIdAsync(int id)
+    {
+        var agent = await _db.Agents
+            .Include(a => a.FileTargets)
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+        return agent is null ? null : await EnrichWithStatsAsync(agent);
+    }
+
+    public async Task<AgentDto> CreateAsync(CreateAgentRequest request)
+    {
+        var agent = new Agent
+        {
+            Name                     = request.Name,
+            Description              = request.Description,
+            IsEnabled                = request.IsEnabled,
+            BlobContainerName        = request.BlobContainerName,
+            NotificationEmail        = request.NotificationEmail,
+            NotifyOnSuccess          = request.NotifyOnSuccess,
+            NotifyOnFileNotFound     = request.NotifyOnFileNotFound,
+            NotifyOnDataIssue        = request.NotifyOnDataIssue,
+            MaxRetryCount            = request.MaxRetryCount,
+            AutoRetryIntervalMinutes = request.AutoRetryIntervalMinutes,
+            SqlPushEnabled           = request.SqlPushEnabled,
+            SqlTargetTable           = request.SqlTargetTable,
+            SqlColumnMappingJson     = request.SqlColumnMappingJson,
+            BlobArchiveFilePattern   = request.BlobArchiveFilePattern,
+            BlobArchiveAppendDate    = request.BlobArchiveAppendDate,
+            CreatedAt                = DateTime.UtcNow,
+            UpdatedAt                = DateTime.UtcNow,
+        };
+
+        foreach (var t in request.FileTargets)
+            agent.FileTargets.Add(new AgentFileTarget
+            {
+                FilePattern = t.FilePattern,
+                AppendDate  = t.AppendDate,
+                IsRequired  = t.IsRequired,
+            });
+
+        _db.Agents.Add(agent);
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("Agent '{Name}' created (Id={Id})", agent.Name, agent.Id);
+        return await EnrichWithStatsAsync(agent);
+    }
+
+    public async Task<AgentDto?> UpdateAsync(int id, UpdateAgentRequest request)
+    {
+        var agent = await _db.Agents
+            .Include(a => a.FileTargets)
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+        if (agent is null) return null;
+
+        if (request.Name is not null)                     agent.Name                     = request.Name;
+        if (request.Description is not null)              agent.Description              = request.Description;
+        if (request.IsEnabled.HasValue)                   agent.IsEnabled                = request.IsEnabled.Value;
+        if (request.BlobContainerName is not null)        agent.BlobContainerName        = request.BlobContainerName;
+        if (request.NotificationEmail is not null)        agent.NotificationEmail        = request.NotificationEmail;
+        if (request.NotifyOnSuccess.HasValue)             agent.NotifyOnSuccess          = request.NotifyOnSuccess.Value;
+        if (request.NotifyOnFileNotFound.HasValue)        agent.NotifyOnFileNotFound     = request.NotifyOnFileNotFound.Value;
+        if (request.NotifyOnDataIssue.HasValue)           agent.NotifyOnDataIssue        = request.NotifyOnDataIssue.Value;
+        if (request.MaxRetryCount.HasValue)               agent.MaxRetryCount            = request.MaxRetryCount.Value;
+        if (request.AutoRetryIntervalMinutes.HasValue)    agent.AutoRetryIntervalMinutes = request.AutoRetryIntervalMinutes.Value;
+        if (request.SqlPushEnabled.HasValue)              agent.SqlPushEnabled           = request.SqlPushEnabled.Value;
+        if (request.SqlTargetTable is not null)           agent.SqlTargetTable           = request.SqlTargetTable;
+        if (request.SqlColumnMappingJson is not null)     agent.SqlColumnMappingJson     = request.SqlColumnMappingJson;
+        if (request.BlobArchiveFilePattern is not null)   agent.BlobArchiveFilePattern   = request.BlobArchiveFilePattern;
+        if (request.BlobArchiveAppendDate.HasValue)       agent.BlobArchiveAppendDate    = request.BlobArchiveAppendDate.Value;
+
+        if (request.FileTargets is not null)
+        {
+            _db.AgentFileTargets.RemoveRange(agent.FileTargets);
+            agent.FileTargets.Clear();
+            foreach (var t in request.FileTargets)
+                agent.FileTargets.Add(new AgentFileTarget
+                {
+                    FilePattern = t.FilePattern,
+                    AppendDate  = t.AppendDate,
+                    IsRequired  = t.IsRequired,
+                });
+        }
+
+        agent.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("Agent '{Name}' updated (Id={Id})", agent.Name, agent.Id);
+        return await EnrichWithStatsAsync(agent);
+    }
+
+    public async Task<bool> DeleteAsync(int id)
+    {
+        var agent = await _db.Agents.FindAsync(id);
+        if (agent is null) return false;
+
+        _db.Agents.Remove(agent);
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("Agent Id={Id} deleted.", id);
+        return true;
+    }
+
+    public async Task<IEnumerable<Agent>> GetEnabledAgentsWithTargetsAsync()
+    {
+        return await _db.Agents
+            .Include(a => a.FileTargets)
+            .Where(a => a.IsEnabled)
+            .ToListAsync();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private async Task<AgentDto> EnrichWithStatsAsync(Agent agent)
+    {
+        var dto = ToDto(agent);
+
+        var stats = await _db.BlobWatcherJobs
+            .Where(j => j.AgentId == agent.Id)
+            .GroupBy(j => j.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        foreach (var s in stats)
+        {
+            switch (s.Status)
+            {
+                case BlobWatcherJobStatus.Completed:
+                    dto.JobsCompleted += s.Count; break;
+                case BlobWatcherJobStatus.Failed:
+                case BlobWatcherJobStatus.Rejected:
+                    dto.JobsFailed += s.Count; break;
+                case BlobWatcherJobStatus.AwaitingApproval:
+                case BlobWatcherJobStatus.ValidationFailed:
+                case BlobWatcherJobStatus.ReplyReceived:
+                    dto.JobsAwaitingApproval += s.Count; break;
+                default:
+                    dto.JobsInProgress += s.Count; break;
+            }
+        }
+
+        dto.LastActivity = await _db.BlobWatcherJobs
+            .Where(j => j.AgentId == agent.Id)
+            .MaxAsync(j => (DateTime?)j.UpdatedAt);
+
+        return dto;
+    }
+
+    private static AgentDto ToDto(Agent a) => new()
+    {
+        Id                       = a.Id,
+        Name                     = a.Name,
+        Description              = a.Description,
+        IsEnabled                = a.IsEnabled,
+        BlobContainerName        = a.BlobContainerName,
+        NotificationEmail        = a.NotificationEmail,
+        NotifyOnSuccess          = a.NotifyOnSuccess,
+        NotifyOnFileNotFound     = a.NotifyOnFileNotFound,
+        NotifyOnDataIssue        = a.NotifyOnDataIssue,
+        MaxRetryCount            = a.MaxRetryCount,
+        AutoRetryIntervalMinutes = a.AutoRetryIntervalMinutes,
+        SqlPushEnabled           = a.SqlPushEnabled,
+        SqlTargetTable           = a.SqlTargetTable,
+        SqlColumnMappingJson     = a.SqlColumnMappingJson,
+        BlobArchiveFilePattern   = a.BlobArchiveFilePattern,
+        BlobArchiveAppendDate    = a.BlobArchiveAppendDate,
+        CreatedAt                = a.CreatedAt,
+        UpdatedAt                = a.UpdatedAt,
+        FileTargets              = a.FileTargets.Select(t => new AgentFileTargetDto
+        {
+            Id          = t.Id,
+            AgentId     = t.AgentId,
+            FilePattern = t.FilePattern,
+            AppendDate  = t.AppendDate,
+            IsRequired  = t.IsRequired,
+        }).ToList(),
+    };
+}
