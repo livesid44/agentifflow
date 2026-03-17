@@ -363,7 +363,7 @@ public static class AgentSeedService
     public const string StartupProbeBlobName = "[startup-probe]";
 
     /// <summary>
-    /// Creates a startup-probe <see cref="BlobWatcherJob"/> for every enabled agent.
+    /// Creates startup-probe <see cref="BlobWatcherJob"/> for every enabled agent.
     /// <list type="bullet">
     ///   <item>Agents with the <see cref="SkillType.LogAnalysis"/> skill require Azure OpenAI to be
     ///   configured.  When the OpenAI endpoint or API key are absent the probe job is immediately
@@ -410,7 +410,8 @@ public static class AgentSeedService
             {
                 probeStatus  = BlobWatcherJobStatus.Failed;
                 errorMessage = "No AI configuration found. Please configure the Azure OpenAI " +
-                               "endpoint, API key and deployment name on the Integration Settings page.";
+                               "endpoint, API key and deployment name on the Integration Settings page " +
+                               "(Configuration → Integration Settings).";
                 logEntry     = $"[{now:u}] Startup probe — agent '{agent.Name}': " +
                                "LogAnalysis skill is enabled but no Azure OpenAI configuration was found. " +
                                "Configure AI settings to enable automated log analysis.";
