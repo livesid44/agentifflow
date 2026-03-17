@@ -316,6 +316,8 @@ using (var scope = app.Services.CreateScope())
         // ── Seed built-in demo agents ─────────────────────────────────────────
         await AgentifFlow.Api.Services.AgentSeedService.SeedNerandomilastAgentAsync(
             db, startupLogger, CancellationToken.None);
+        await AgentifFlow.Api.Services.AgentSeedService.SeedAzkabanJobMonitorAgentAsync(
+            db, startupLogger, CancellationToken.None);
     }
     catch (Exception ex)
     {

@@ -39,8 +39,11 @@ public class JobMonitorController : ControllerBase
     /// <summary>
     /// Returns a compact health summary that agents can poll.
     /// Configure <c>FailureIndicator</c> as <c>"hasFailed":true</c> in the skill config.
+    /// This endpoint is intentionally unauthenticated so the seed demo agent can poll it
+    /// without requiring a JWT token configured in the skill settings.
     /// </summary>
     [HttpGet("status")]
+    [AllowAnonymous]
     public async Task<ActionResult<JobMonitorStatusDto>> GetStatus(CancellationToken ct)
     {
         var all    = await _db.MonitoredJobs.OrderByDescending(j => j.StartedAt).Take(100).ToListAsync(ct);

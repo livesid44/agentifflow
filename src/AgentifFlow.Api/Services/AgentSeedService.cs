@@ -2,6 +2,7 @@ using AgentifFlow.Api.Data;
 using AgentifFlow.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace AgentifFlow.Api.Services;
@@ -208,5 +209,149 @@ public static class AgentSeedService
         result = Regex.Replace(result, @"_\d{1,2}(AM|PM)", string.Empty, RegexOptions.IgnoreCase);
 
         return result;
+    }
+
+    // ── Azkaban Job Monitor seed ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Seeds the "Azkaban Job Monitor" demo agent if it does not already exist.
+    ///
+    /// <para>
+    /// This agent demonstrates Use Case 2 end-to-end:
+    /// <list type="number">
+    ///   <item>The <see cref="SkillType.ThirdPartyApiIntegration"/> skill polls
+    ///     <c>GET /api/jobmonitor/status</c> every cycle.</item>
+    ///   <item>When a job failure is detected (response contains <c>"hasFailed":true</c>),
+    ///     the <see cref="SkillType.LogAnalysis"/> skill fetches the job logs, uses an LLM
+    ///     to analyse the root cause and emails the notification address for confirmation.</item>
+    ///   <item>Upon human confirmation the agent asks whether to send a file-correction
+    ///     email to the POC, then sends it upon approval.</item>
+    /// </list>
+    /// </para>
+    ///
+    /// <para>
+    /// To run the demo: navigate to <em>Job Monitor</em> in the sidebar, add a job and
+    /// click <em>Simulate Failure</em>.  The agent will pick it up on the next poll cycle.
+    /// </para>
+    /// </summary>
+    public static async Task SeedAzkabanJobMonitorAgentAsync(
+        AgentifFlowDbContext db,
+        ILogger logger,
+        CancellationToken ct = default)
+    {
+        const string agentName = "Azkaban Job Monitor";
+
+        // Guard: Agents table may not exist yet on fresh SQLite databases.
+        if (db.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            var conn      = db.Database.GetDbConnection();
+            var shouldClose = conn.State != ConnectionState.Open;
+            if (shouldClose) await conn.OpenAsync(ct);
+            try
+            {
+                using var chk = conn.CreateCommand();
+                chk.CommandText =
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Agents'";
+                var tableExists = Convert.ToInt32(await chk.ExecuteScalarAsync(ct)) > 0;
+                if (!tableExists)
+                {
+                    logger.LogWarning(
+                        "Seed: 'Agents' table not found — skipping Azkaban Job Monitor seed.");
+                    return;
+                }
+            }
+            finally
+            {
+                if (shouldClose) await conn.CloseAsync();
+            }
+        }
+
+        var agent = await db.Agents
+            .Include(a => a.Skills)
+            .FirstOrDefaultAsync(a => a.Name == agentName, ct);
+
+        if (agent is not null)
+        {
+            logger.LogDebug("Seed: agent '{Name}' already exists — skipping.", agentName);
+            return;
+        }
+
+        logger.LogInformation("Seed: creating demo agent '{Name}'.", agentName);
+
+        // ThirdPartyApiIntegration skill config — polls the local Job Monitor API.
+        // The EndpointUrl uses localhost:5045 (the default dev port from launchSettings).
+        // Users can update this in the agent's Skills settings once they know the actual port.
+        var apiConfig = new ThirdPartyApiConfig
+        {
+            EndpointUrl             = "http://localhost:5045/api/jobmonitor/status",
+            RequestMethod           = "GET",
+            AuthType                = "None",
+            FailureIndicator        = "\"hasFailed\":true",
+            SuccessIndicator        = null,
+            RequestPayloadTemplate  = null,
+        };
+
+        // LogAnalysis skill config — POC details for the file-correction email.
+        // Users should update PocEmail / PocName via the agent's Skills settings.
+        var logConfig = new LogAnalysisConfig
+        {
+            PocEmail       = "poc@example.com",
+            PocName        = "Data Delivery Team",
+            AnalysisPrompt = null,   // uses built-in file-naming mismatch prompt
+        };
+
+        var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = null };
+
+        agent = new Agent
+        {
+            Name        = agentName,
+            Description =
+                "Monitors Azkaban (or any job scheduler) for failed jobs and performs automated " +
+                "root-cause analysis. " +
+                "Step 1 — ThirdPartyApiIntegration skill polls GET /api/jobmonitor/status each cycle; " +
+                "when a failure is detected (response contains \"hasFailed\":true) the job logs are fetched. " +
+                "Step 2 — LogAnalysis skill analyses the logs with an LLM, identifies the cause " +
+                "(e.g. missing / misnamed files) and emails a summary to the notification address for human confirmation. " +
+                "Step 3 — Upon confirmation the agent asks whether to send a correction email to the data POC. " +
+                "Step 4 — Upon approval the correction email is sent automatically. " +
+                "Demo: use the Job Monitor page to add jobs and click 'Simulate Failure' to trigger the workflow.",
+            IsEnabled                = true,
+            NotifyOnFileNotFound     = false,
+            NotifyOnSuccess          = false,
+            NotifyOnDataIssue        = true,
+            MaxRetryCount            = 3,
+            AutoRetryIntervalMinutes = 1,
+            SqlPushEnabled           = false,
+            BlobContainerName        = null,
+            CreatedAt                = DateTime.UtcNow,
+            UpdatedAt                = DateTime.UtcNow,
+            Skills = new List<AgentSkill>
+            {
+                new()
+                {
+                    SkillType  = nameof(Models.SkillType.EmailMonitoring),
+                    IsEnabled  = true,
+                    ConfigJson = null,
+                },
+                new()
+                {
+                    SkillType  = nameof(Models.SkillType.ThirdPartyApiIntegration),
+                    IsEnabled  = true,
+                    ConfigJson = JsonSerializer.Serialize(apiConfig, jsonOptions),
+                },
+                new()
+                {
+                    SkillType  = nameof(Models.SkillType.LogAnalysis),
+                    IsEnabled  = true,
+                    ConfigJson = JsonSerializer.Serialize(logConfig, jsonOptions),
+                },
+            },
+        };
+
+        db.Agents.Add(agent);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation(
+            "Seed: demo agent '{Name}' (Id={Id}) created.", agent.Name, agent.Id);
     }
 }
