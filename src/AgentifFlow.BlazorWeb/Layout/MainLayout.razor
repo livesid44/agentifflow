@@ -1,4 +1,6 @@
 @inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+@implements IDisposable
 
 <MudLayout>
     <!-- ── Top app bar — authenticated users only ───────────────────────────── -->
@@ -68,24 +70,41 @@
         </Authorized>
     </AuthorizeView>
 
-    <MudMainContent>
+    <MudMainContent Class="main-content-with-footer">
         <MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
             @Body
         </MudContainer>
-
-        <!-- ── Footer ──────────────────────────────────────────────────────── -->
-        <footer class="app-footer">
-            <div class="app-footer-inner">
-                <img src="logo.png" style="height:20px;width:auto;" alt="AgentifFlow" />
-                <span class="app-footer-text">
-                    Powered by <strong>Tech Mahindra Ltd</strong>
-                </span>
-            </div>
-        </footer>
     </MudMainContent>
+
+    <!-- ── Footer — fixed to the bottom of the viewport ───────────────────── -->
+    <footer class="app-footer">
+        <div class="app-footer-inner">
+            <img src="logo.png" style="height:20px;width:auto;" alt="AgentifFlow" />
+            <span class="app-footer-text">
+                Powered by <strong>Tech Mahindra Ltd</strong>
+            </span>
+        </div>
+    </footer>
 </MudLayout>
 
 @code {
     private bool _drawerOpen = false;
+
+    protected override void OnInitialized()
+    {
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _drawerOpen = false;
+        StateHasChanged();
+    }
+
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
 }

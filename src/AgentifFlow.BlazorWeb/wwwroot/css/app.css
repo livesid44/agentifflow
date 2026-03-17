@@ -281,10 +281,19 @@
 }
 
 
-/* ── App footer (TechM Orion — dark #373737) ───────────────────────────────── */
+/* ── Main content — ensure body text is never hidden behind the fixed footer ── */
+.main-content-with-footer {
+    padding-bottom: 60px !important;
+}
+
+/* ── App footer (TechM Orion — dark #373737) — fixed to viewport bottom ────── */
 .app-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 900;
     background: #373737;
-    margin-top: 40px;
     padding: 0;
 }
 

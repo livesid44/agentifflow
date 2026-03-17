@@ -173,11 +173,18 @@ else
         <MudTabPanel Text="SQL Database" Icon="@Icons.Material.Outlined.TableChart" Class="pa-6">
             <MudGrid Spacing="3">
                 <MudItem xs="12">
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">
+                        <strong>Sample connection strings:</strong><br />
+                        <code>Server=myserver.database.windows.net;Database=AgentifFlowDb;User Id=myuser;Password=mypassword;TrustServerCertificate=True;</code><br />
+                        <em style="font-size:0.78rem;">Azure SQL (SQL authentication)</em><br /><br />
+                        <code>Server=localhost\SQLEXPRESS;Database=AgentifFlowDb;Trusted_Connection=True;TrustServerCertificate=True;</code><br />
+                        <em style="font-size:0.78rem;">Local SQL Server (Windows authentication)</em>
+                    </MudAlert>
                     <MudTextField @bind-Value="_sqlConnStr"
                                   Label="Connection String"
                                   InputType="InputType.Password"
-                                  Placeholder="Server=…;Database=AgentifFlowDb;…"
-                                  HelperText="ADO.NET connection string for your Azure SQL or SQL Server instance."
+                                  Placeholder="Server=myserver.database.windows.net;Database=AgentifFlowDb;User Id=myuser;Password=mypassword;TrustServerCertificate=True;"
+                                  HelperText="ADO.NET connection string for your Azure SQL or local SQL Server instance. Refer to the sample above."
                                   Variant="Variant.Outlined" FullWidth="true" />
                 </MudItem>
                 <MudItem xs="12">
