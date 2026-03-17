@@ -355,6 +355,256 @@ public static class AgentSeedService
             "Seed: demo agent '{Name}' (Id={Id}) created.", agent.Name, agent.Id);
     }
 
+    // ── Sample BlobWatcher jobs (Dashboard / Jobs tab) ────────────────────────
+
+    /// <summary>
+    /// Sentinel blob name prefix used for Azkaban-agent sample external-API check jobs.
+    /// </summary>
+    private const string SampleExtApiJobBlobName = "[ext-api][sample]";
+
+    /// <summary>
+    /// Seeds sample <see cref="BlobWatcherJob"/> rows so the Dashboard Jobs tab is
+    /// populated out-of-the-box for demonstration purposes.
+    /// <list type="bullet">
+    ///   <item>Agent 1 – "Nerandomilast Target Files Monitor": blob-file detection and
+    ///   processing jobs representing the daily BI file pipeline.</item>
+    ///   <item>Agent 2 – "Azkaban Job Monitor": external-API check jobs representing the
+    ///   ThirdPartyApiIntegration skill polling the job-status endpoint.</item>
+    /// </list>
+    /// This method is idempotent: it skips seeding for an agent when that agent already
+    /// has non-probe <see cref="BlobWatcherJob"/> rows so that real runtime jobs are
+    /// never overwritten.
+    /// </summary>
+    public static async Task SeedSampleBlobWatcherJobsAsync(
+        AgentifFlowDbContext db,
+        ILogger logger,
+        CancellationToken ct = default)
+    {
+        const string nrmAgentName = "Nerandomilast Target Files Monitor";
+        const string azkAgentName = "Azkaban Job Monitor";
+
+        var nrmAgent = await db.Agents.FirstOrDefaultAsync(a => a.Name == nrmAgentName, ct);
+        var azkAgent = await db.Agents.FirstOrDefaultAsync(a => a.Name == azkAgentName, ct);
+
+        var now = DateTime.UtcNow;
+
+        // ── Agent 1 — Nerandomilast file-watcher sample jobs ──────────────────
+        if (nrmAgent is not null)
+        {
+            bool hasExisting = await db.BlobWatcherJobs.AnyAsync(
+                j => j.AgentId == nrmAgent.Id && j.BlobName != StartupProbeBlobName, ct);
+
+            if (!hasExisting)
+            {
+                var dateStr = now.ToString("yyyyMMdd");
+                var prevDate = now.AddDays(-1).ToString("yyyyMMdd");
+
+                var nrmJobs = new List<BlobWatcherJob>
+                {
+                    // Yesterday's full run — all 4 files arrived, SQL push succeeded
+                    new()
+                    {
+                        BlobName      = $"344_bi_nerandomilast_targets_{prevDate}_{prevDate}_events.txt",
+                        ContainerName = "nerandomilast-targets",
+                        AgentId       = nrmAgent.Id,
+                        Status        = BlobWatcherJobStatus.Completed,
+                        RowsInserted  = 12,
+                        DetectedAt    = now.AddDays(-1).AddHours(5),
+                        CompletedAt   = now.AddDays(-1).AddHours(5).AddMinutes(2),
+                        UpdatedAt     = now.AddDays(-1).AddHours(5).AddMinutes(2),
+                        LogDetails    = BuildBlobLog(now.AddDays(-1).AddHours(5),
+                            ("INFO",  "FileMonitor",  $"Detected blob: 344_bi_nerandomilast_targets_{prevDate}_{prevDate}_events.txt"),
+                            ("INFO",  "Validator",    "Running CSV schema validation"),
+                            ("INFO",  "Validator",    "Schema validation passed (12 rows, 8 columns)"),
+                            ("INFO",  "SqlManager",   "Connecting to SQL target: nerandomilast_targets"),
+                            ("INFO",  "SqlManager",   "Inserted 12 rows into [dbo].[nerandomilast_targets]"),
+                            ("INFO",  "FileMonitor",  "Job completed successfully"))
+                    },
+                    new()
+                    {
+                        BlobName      = $"344_bi_nerandomilast_targets_{prevDate}_{prevDate}_topics.txt",
+                        ContainerName = "nerandomilast-targets",
+                        AgentId       = nrmAgent.Id,
+                        Status        = BlobWatcherJobStatus.Completed,
+                        RowsInserted  = 10,
+                        DetectedAt    = now.AddDays(-1).AddHours(5).AddMinutes(1),
+                        CompletedAt   = now.AddDays(-1).AddHours(5).AddMinutes(3),
+                        UpdatedAt     = now.AddDays(-1).AddHours(5).AddMinutes(3),
+                        LogDetails    = BuildBlobLog(now.AddDays(-1).AddHours(5).AddMinutes(1),
+                            ("INFO",  "FileMonitor",  $"Detected blob: 344_bi_nerandomilast_targets_{prevDate}_{prevDate}_topics.txt"),
+                            ("INFO",  "Validator",    "Running CSV schema validation"),
+                            ("INFO",  "Validator",    "Schema validation passed (10 rows, 6 columns)"),
+                            ("INFO",  "SqlManager",   "Inserted 10 rows into [dbo].[nerandomilast_topics]"),
+                            ("INFO",  "FileMonitor",  "Job completed successfully"))
+                    },
+                    new()
+                    {
+                        BlobName      = $"344_bi_nerandomilast_targets_{prevDate}_{prevDate}_diseases.txt",
+                        ContainerName = "nerandomilast-targets",
+                        AgentId       = nrmAgent.Id,
+                        Status        = BlobWatcherJobStatus.Completed,
+                        RowsInserted  = 7,
+                        DetectedAt    = now.AddDays(-1).AddHours(5).AddMinutes(2),
+                        CompletedAt   = now.AddDays(-1).AddHours(5).AddMinutes(4),
+                        UpdatedAt     = now.AddDays(-1).AddHours(5).AddMinutes(4),
+                        LogDetails    = BuildBlobLog(now.AddDays(-1).AddHours(5).AddMinutes(2),
+                            ("INFO",  "FileMonitor",  $"Detected blob: 344_bi_nerandomilast_targets_{prevDate}_{prevDate}_diseases.txt"),
+                            ("INFO",  "Validator",    "Running CSV schema validation"),
+                            ("INFO",  "Validator",    "Schema validation passed (7 rows, 5 columns)"),
+                            ("INFO",  "SqlManager",   "Inserted 7 rows into [dbo].[nerandomilast_diseases]"),
+                            ("INFO",  "FileMonitor",  "Job completed successfully"))
+                    },
+                    new()
+                    {
+                        BlobName      = $"344_bi_nerandomilast_targets_{prevDate}_{prevDate}_control.txt",
+                        ContainerName = "nerandomilast-targets",
+                        AgentId       = nrmAgent.Id,
+                        Status        = BlobWatcherJobStatus.Completed,
+                        RowsInserted  = 3,
+                        DetectedAt    = now.AddDays(-1).AddHours(5).AddMinutes(3),
+                        CompletedAt   = now.AddDays(-1).AddHours(5).AddMinutes(5),
+                        UpdatedAt     = now.AddDays(-1).AddHours(5).AddMinutes(5),
+                        LogDetails    = BuildBlobLog(now.AddDays(-1).AddHours(5).AddMinutes(3),
+                            ("INFO",  "FileMonitor",  $"Detected blob: 344_bi_nerandomilast_targets_{prevDate}_{prevDate}_control.txt"),
+                            ("INFO",  "Validator",    "Running control-manifest validation"),
+                            ("INFO",  "Validator",    "Control manifest validated: 3 checksum records match"),
+                            ("INFO",  "SqlManager",   "Inserted 3 rows into [dbo].[nerandomilast_control]"),
+                            ("INFO",  "FileMonitor",  "Job completed successfully"))
+                    },
+                    // Today's run — events file has validation errors, awaiting approval
+                    new()
+                    {
+                        BlobName      = $"344_bi_nerandomilast_targets_{dateStr}_{dateStr}_events.txt",
+                        ContainerName = "nerandomilast-targets",
+                        AgentId       = nrmAgent.Id,
+                        Status        = BlobWatcherJobStatus.ValidationFailed,
+                        ErrorMessage  = "Schema validation failed: column 'CausalityRating' has 2 NULL values (PT-003, PT-009). Expected non-null per protocol NRM-001-v4.2 §8.3.",
+                        DetectedAt    = now.AddHours(-3),
+                        UpdatedAt     = now.AddHours(-3).AddMinutes(1),
+                        LogDetails    = BuildBlobLog(now.AddHours(-3),
+                            ("INFO",  "FileMonitor",  $"Detected blob: 344_bi_nerandomilast_targets_{dateStr}_{dateStr}_events.txt"),
+                            ("INFO",  "Validator",    "Running CSV schema validation against protocol NRM-001-v4.2 §8.3"),
+                            ("WARN",  "Validator",    "Row PT-003: CausalityRating is NULL — expected non-null (SAE record)"),
+                            ("WARN",  "Validator",    "Row PT-009: CausalityRating is NULL — expected non-null (SAE record)"),
+                            ("ERROR", "Validator",    "Schema validation FAILED: 2 NULL values in required column 'CausalityRating'"),
+                            ("INFO",  "FileMonitor",  "Job status set to ValidationFailed — awaiting operator approval"))
+                    },
+                    // Today's topics file — completed OK
+                    new()
+                    {
+                        BlobName      = $"344_bi_nerandomilast_targets_{dateStr}_{dateStr}_topics.txt",
+                        ContainerName = "nerandomilast-targets",
+                        AgentId       = nrmAgent.Id,
+                        Status        = BlobWatcherJobStatus.Completed,
+                        RowsInserted  = 10,
+                        DetectedAt    = now.AddHours(-2.5),
+                        CompletedAt   = now.AddHours(-2.5).AddMinutes(2),
+                        UpdatedAt     = now.AddHours(-2.5).AddMinutes(2),
+                        LogDetails    = BuildBlobLog(now.AddHours(-2.5),
+                            ("INFO",  "FileMonitor",  $"Detected blob: 344_bi_nerandomilast_targets_{dateStr}_{dateStr}_topics.txt"),
+                            ("INFO",  "Validator",    "Schema validation passed (10 rows)"),
+                            ("INFO",  "SqlManager",   "Inserted 10 rows into [dbo].[nerandomilast_topics]"),
+                            ("INFO",  "FileMonitor",  "Job completed successfully"))
+                    },
+                };
+
+                db.BlobWatcherJobs.AddRange(nrmJobs);
+                logger.LogInformation(
+                    "Sample BlobWatcher jobs: seeded {Count} job(s) for agent '{Name}'.",
+                    nrmJobs.Count, nrmAgent.Name);
+            }
+            else
+            {
+                logger.LogDebug(
+                    "Sample BlobWatcher jobs: agent '{Name}' already has jobs — skipping.", nrmAgent.Name);
+            }
+        }
+
+        // ── Agent 2 — Azkaban Job Monitor sample ext-api check jobs ──────────
+        if (azkAgent is not null)
+        {
+            bool hasExisting = await db.BlobWatcherJobs.AnyAsync(
+                j => j.AgentId == azkAgent.Id && j.BlobName != StartupProbeBlobName, ct);
+
+            if (!hasExisting)
+            {
+                var azkJobs = new List<BlobWatcherJob>
+                {
+                    // Two successful API poll cycles (no failure detected — logged as passed)
+                    new()
+                    {
+                        BlobName      = $"{SampleExtApiJobBlobName}-pass-1",
+                        ContainerName = "[ext]",
+                        AgentId       = azkAgent.Id,
+                        Status        = BlobWatcherJobStatus.Completed,
+                        DetectedAt    = now.AddHours(-6),
+                        CompletedAt   = now.AddHours(-6).AddSeconds(3),
+                        UpdatedAt     = now.AddHours(-6).AddSeconds(3),
+                        LogDetails    = BuildBlobLog(now.AddHours(-6),
+                            ("INFO", "ApiMonitor", "Polling Azkaban job-status endpoint: GET /api/jobmonitor/status"),
+                            ("INFO", "ApiMonitor", "HTTP 200 OK — response received in 38 ms"),
+                            ("INFO", "ApiMonitor", "Response: {\"hasFailed\":false}"),
+                            ("INFO", "ApiMonitor", "Success indicator matched — no failures detected"),
+                            ("INFO", "ApiMonitor", "API check passed"))
+                    },
+                    new()
+                    {
+                        BlobName      = $"{SampleExtApiJobBlobName}-pass-2",
+                        ContainerName = "[ext]",
+                        AgentId       = azkAgent.Id,
+                        Status        = BlobWatcherJobStatus.Completed,
+                        DetectedAt    = now.AddHours(-3),
+                        CompletedAt   = now.AddHours(-3).AddSeconds(2),
+                        UpdatedAt     = now.AddHours(-3).AddSeconds(2),
+                        LogDetails    = BuildBlobLog(now.AddHours(-3),
+                            ("INFO", "ApiMonitor", "Polling Azkaban job-status endpoint: GET /api/jobmonitor/status"),
+                            ("INFO", "ApiMonitor", "HTTP 200 OK — response received in 41 ms"),
+                            ("INFO", "ApiMonitor", "Response: {\"hasFailed\":false}"),
+                            ("INFO", "ApiMonitor", "Success indicator matched — no failures detected"),
+                            ("INFO", "ApiMonitor", "API check passed"))
+                    },
+                    // One failure detected — job created, log analysis triggered
+                    new()
+                    {
+                        BlobName      = $"{SampleExtApiJobBlobName}-fail-1",
+                        ContainerName = "[ext]",
+                        AgentId       = azkAgent.Id,
+                        Status        = BlobWatcherJobStatus.Failed,
+                        ErrorMessage  = "Azkaban job failure detected: GET /api/jobmonitor/status returned {\"hasFailed\":true}. Failure indicator matched.",
+                        DetectedAt    = now.AddHours(-1.5),
+                        CompletedAt   = now.AddHours(-1.5).AddSeconds(5),
+                        UpdatedAt     = now.AddHours(-1.5).AddSeconds(5),
+                        LogDetails    = BuildBlobLog(now.AddHours(-1.5),
+                            ("INFO",  "ApiMonitor", "Polling Azkaban job-status endpoint: GET /api/jobmonitor/status"),
+                            ("INFO",  "ApiMonitor", "HTTP 200 OK — response received in 45 ms"),
+                            ("INFO",  "ApiMonitor", "Response: {\"hasFailed\":true}"),
+                            ("WARN",  "ApiMonitor", "Failure indicator matched: 'hasFailed' = true"),
+                            ("ERROR", "ApiMonitor", "Azkaban job failure detected — creating failure job"),
+                            ("INFO",  "ApiMonitor", "ThirdPartyApiIntegration skill: failure job logged"))
+                    },
+                };
+
+                db.BlobWatcherJobs.AddRange(azkJobs);
+                logger.LogInformation(
+                    "Sample BlobWatcher jobs: seeded {Count} job(s) for agent '{Name}'.",
+                    azkJobs.Count, azkAgent.Name);
+            }
+            else
+            {
+                logger.LogDebug(
+                    "Sample BlobWatcher jobs: agent '{Name}' already has jobs — skipping.", azkAgent.Name);
+            }
+        }
+
+        if (nrmAgent is not null || azkAgent is not null)
+            await db.SaveChangesAsync(ct);
+    }
+
+    private static string BuildBlobLog(
+        DateTime baseTime,
+        params (string Level, string Component, string Message)[] entries)
+        => BuildLog(baseTime, entries);
+
     // ── Startup probe jobs ────────────────────────────────────────────────────
 
     /// <summary>

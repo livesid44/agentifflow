@@ -111,9 +111,22 @@ public class BlobWatcherBackgroundService : BackgroundService
     {
         var agentConfig = AgentRunConfig.FromAgent(agent, globalConfig);
 
-        if (string.IsNullOrWhiteSpace(agentConfig.BlobStorageConnectionString) ||
-            string.IsNullOrWhiteSpace(agentConfig.BlobContainerName))
+        bool blobConfigured = !string.IsNullOrWhiteSpace(agentConfig.BlobStorageConnectionString) &&
+                              !string.IsNullOrWhiteSpace(agentConfig.BlobContainerName);
+
+        if (!blobConfigured)
         {
+            if (agentConfig.ThirdPartyApiActive)
+            {
+                // Blob storage is not configured but this agent uses the
+                // ThirdPartyApiIntegration skill — run API checks and return.
+                _logger.LogInformation(
+                    "Agent '{Name}' (Id={Id}): blob storage not configured — skipping blob scan, running API checks.",
+                    agent.Name, agent.Id);
+                await RunThirdPartyApiChecksAsync(agent, agentConfig, services, db, ct);
+                return;
+            }
+
             _logger.LogWarning("Agent '{Name}' (Id={Id}): blob storage not configured — skipping.", agent.Name, agent.Id);
             return;
         }

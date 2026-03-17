@@ -326,6 +326,14 @@ using (var scope = app.Services.CreateScope())
         await AgentifFlow.Api.Services.AgentSeedService.SeedDemoMonitoredJobsAsync(
             db, startupLogger, CancellationToken.None);
 
+        // ── Sample BlobWatcher jobs (Dashboard / Jobs tab sample data) ────────
+        // Seeds realistic BlobWatcherJob rows for both demo agents so the
+        // Dashboard Jobs tab is populated out-of-the-box with representative
+        // history.  Per-agent idempotent: skipped if the agent already has
+        // non-probe jobs so real runtime jobs are never overwritten.
+        await AgentifFlow.Api.Services.AgentSeedService.SeedSampleBlobWatcherJobsAsync(
+            db, startupLogger, CancellationToken.None);
+
         // ── Startup probe jobs (one per enabled agent) ────────────────────────
         // For agents that require AI (LogAnalysis skill), the probe job is marked
         // Failed with "No AI configuration found" when OpenAI has not been set up.
