@@ -251,6 +251,41 @@ using (var scope = app.Services.CreateScope())
             await EnsureSqliteColumnAsync(db, startupLogger,
                 table: "BlobWatcherJobs",   column: "AgentId",                 definition: "INTEGER NULL");
 
+            // Multi-agent: Agents table (added in 20260316000000_AddAgents)
+            await EnsureSqliteTableAsync(db, startupLogger, "Agents", @"
+                CREATE TABLE IF NOT EXISTS ""Agents"" (
+                    ""Id""                       INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    ""Name""                     TEXT    NOT NULL DEFAULT '',
+                    ""Description""              TEXT    NULL,
+                    ""IsEnabled""                INTEGER NOT NULL DEFAULT 1,
+                    ""BlobContainerName""        TEXT    NULL,
+                    ""NotificationEmail""        TEXT    NULL,
+                    ""NotifyOnSuccess""          INTEGER NOT NULL DEFAULT 0,
+                    ""NotifyOnFileNotFound""     INTEGER NOT NULL DEFAULT 1,
+                    ""NotifyOnDataIssue""        INTEGER NOT NULL DEFAULT 1,
+                    ""MaxRetryCount""            INTEGER NOT NULL DEFAULT 3,
+                    ""AutoRetryIntervalMinutes"" INTEGER NOT NULL DEFAULT 30,
+                    ""SqlPushEnabled""           INTEGER NOT NULL DEFAULT 0,
+                    ""SqlTargetTable""           TEXT    NULL,
+                    ""SqlColumnMappingJson""     TEXT    NULL,
+                    ""BlobArchiveFilePattern""   TEXT    NULL,
+                    ""BlobArchiveAppendDate""    INTEGER NOT NULL DEFAULT 1,
+                    ""CreatedAt""                TEXT    NOT NULL DEFAULT '',
+                    ""UpdatedAt""                TEXT    NOT NULL DEFAULT ''
+                );");
+
+            // Multi-agent: AgentFileTargets table (added in 20260316000000_AddAgents)
+            await EnsureSqliteTableAsync(db, startupLogger, "AgentFileTargets", @"
+                CREATE TABLE IF NOT EXISTS ""AgentFileTargets"" (
+                    ""Id""          INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    ""AgentId""     INTEGER NOT NULL,
+                    ""FilePattern"" TEXT    NOT NULL DEFAULT '',
+                    ""AppendDate""  INTEGER NOT NULL DEFAULT 1,
+                    ""IsRequired""  INTEGER NOT NULL DEFAULT 1,
+                    CONSTRAINT ""FK_AgentFileTargets_Agents"" FOREIGN KEY (""AgentId"")
+                        REFERENCES ""Agents"" (""Id"") ON DELETE CASCADE
+                );");
+
             // Skills: AgentSkills table (added in 20260316010000_AddAgentSkills)
             await EnsureSqliteTableAsync(db, startupLogger, "AgentSkills", @"
                 CREATE TABLE IF NOT EXISTS ""AgentSkills"" (
