@@ -21,4 +21,10 @@ public interface IAgentService
 
     /// <summary>Returns all enabled agents with their file targets and skills — used by the background service.</summary>
     Task<IEnumerable<Agent>> GetEnabledAgentsWithTargetsAsync();
+
+    /// <summary>
+    /// Generates a SQL Server CREATE TABLE DDL script for the agent's configured SQL target table.
+    /// Uses target column names from SqlColumnMappingJson when available.
+    /// </summary>
+    Task<string?> GetSqlScriptAsync(int agentId);
 }

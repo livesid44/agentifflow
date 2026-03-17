@@ -56,4 +56,16 @@ public class AgentApiService : IAgentApiService
         if (!response.IsSuccessStatusCode) return null;
         return await response.Content.ReadFromJsonAsync<List<AgentSkillDto>>();
     }
+
+    public async Task<string?> GetSqlScriptAsync(int agentId)
+    {
+        try
+        {
+            var result = await _http.GetFromJsonAsync<SqlScriptResponse>($"api/agents/{agentId}/sql-script");
+            return result?.Script;
+        }
+        catch { return null; }
+    }
+
+    private sealed class SqlScriptResponse { public string Script { get; set; } = string.Empty; }
 }

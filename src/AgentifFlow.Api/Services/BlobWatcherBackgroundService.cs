@@ -48,7 +48,18 @@ public class BlobWatcherBackgroundService : BackgroundService
                 var db     = scope.ServiceProvider.GetRequiredService<AgentifFlowDbContext>();
                 var config = await db.AppConfigurations.FirstOrDefaultAsync(stoppingToken);
 
-                if (config is null || !config.AgentFlowEnabled)
+                // ── 1. Multi-agent polling ────────────────────────────────────
+                // Query enabled agents first: individual agents being enabled is
+                // sufficient to trigger polling — the global AgentFlowEnabled flag
+                // is only required for the legacy single-config mode.
+                var agents = config is null
+                    ? new System.Collections.Generic.List<Agent>()
+                    : await db.Agents
+                        .Include(a => a.FileTargets)
+                        .Where(a => a.IsEnabled)
+                        .ToListAsync(stoppingToken);
+
+                if (config is null || (!config.AgentFlowEnabled && agents.Count == 0))
                 {
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
@@ -56,24 +67,19 @@ public class BlobWatcherBackgroundService : BackgroundService
 
                 pollInterval = config.BlobPollIntervalSeconds > 0 ? config.BlobPollIntervalSeconds : 60;
 
-                // ── 1. Multi-agent polling ────────────────────────────────────
-                var agents = await db.Agents
-                    .Include(a => a.FileTargets)
-                    .Where(a => a.IsEnabled)
-                    .ToListAsync(stoppingToken);
-
                 if (agents.Count > 0)
                 {
                     foreach (var agent in agents)
                         await RunAgentAsync(agent, config, scope.ServiceProvider, db, stoppingToken);
                 }
-                else if (!string.IsNullOrWhiteSpace(config.BlobStorageConnectionString) &&
+                else if (config.AgentFlowEnabled &&
+                         !string.IsNullOrWhiteSpace(config.BlobStorageConnectionString) &&
                          !string.IsNullOrWhiteSpace(config.BlobContainerName))
                 {
                     // ── Legacy single-config mode (no agents defined) ─────────
                     await PollBlobStorageAsync(scope.ServiceProvider, config, db, stoppingToken);
                 }
-                else
+                else if (config.AgentFlowEnabled)
                 {
                     _logger.LogWarning("Blob storage not fully configured — skipping blob poll.");
                     await SendBlobNotConfiguredNotificationAsync(

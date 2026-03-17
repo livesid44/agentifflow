@@ -118,5 +118,17 @@ public class AgentController : ControllerBase
         if (skills is null) return NotFound();
         return Ok(skills);
     }
+
+    /// <summary>Returns a SQL CREATE TABLE DDL script for the agent's configured SQL target table.</summary>
+    [HttpGet("{id:int}/sql-script")]
+    [ProducesResponseType(typeof(SqlScriptDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSqlScript(int id)
+    {
+        var script = await _agentService.GetSqlScriptAsync(id);
+        if (script is null) return NotFound();
+        return Ok(new SqlScriptDto { Script = script });
+    }
 }
 public record SetEnabledRequest(bool IsEnabled);
+public class SqlScriptDto { public string Script { get; set; } = string.Empty; }

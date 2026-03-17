@@ -14,4 +14,7 @@ public interface IAgentApiService
     Task<List<SkillCatalogueDto>> GetSkillCatalogueAsync();
     Task<List<AgentSkillDto>> GetSkillsAsync(int agentId);
     Task<List<AgentSkillDto>?> SetSkillsAsync(int agentId, SetSkillsRequest request);
+
+    /// <summary>Returns a SQL CREATE TABLE DDL script for the agent's configured SQL target table.</summary>
+    Task<string?> GetSqlScriptAsync(int agentId);
 }

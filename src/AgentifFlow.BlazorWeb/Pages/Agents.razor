@@ -512,6 +512,24 @@ else
                     </MudAlert>
                 }
 
+                <!-- SqlManagement configuration panel -->
+                @if (entry.SkillType == "SqlManagement" && entry.IsEnabled)
+                {
+                    <MudDivider Class="my-3" />
+                    <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="font-weight:600; color:var(--mud-palette-text-secondary);">
+                        <MudIcon Icon="@Icons.Material.Outlined.TableChart" Size="Size.Small" Class="mr-1" />SQL Target Table
+                    </MudText>
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2" Icon="@Icons.Material.Outlined.Info">
+                        The SQL target table and column mapping are set in the agent's <strong>Settings</strong> tab.
+                        Use the button below to copy a ready-to-run <code>CREATE TABLE</code> script for your SQL Server instance.
+                    </MudAlert>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Outlined.ContentCopy"
+                               OnClick="() => CopySqlScriptAsync(_skillsAgent!)">
+                        Copy SQL Script
+                    </MudButton>
+                }
+
                 <!-- LogAnalysis configuration panel -->
                 @if (entry.SkillType == "LogAnalysis" && entry.IsEnabled)
                 {
@@ -717,6 +735,25 @@ else
             else Snackbar.Add("Failed to save skills.", Severity.Error);
         }
         finally { _savingSkills = false; }
+    }
+
+    private async Task CopySqlScriptAsync(AgentDto agent)
+    {
+        try
+        {
+            var script = await AgentService.GetSqlScriptAsync(agent.Id);
+            if (string.IsNullOrWhiteSpace(script))
+            {
+                Snackbar.Add("Could not generate SQL script.", Severity.Warning);
+                return;
+            }
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", script);
+            Snackbar.Add("SQL script copied to clipboard.", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Failed to copy SQL script. Check browser clipboard permissions.", Severity.Warning);
+        }
     }
 
     // ── Agent create/edit dialog ──────────────────────────────────────────────
