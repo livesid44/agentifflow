@@ -131,10 +131,22 @@ public class BlobWatcherBackgroundService : BackgroundService
         {
             foreach (var target in agent.FileTargets)
             {
-                var baseName     = target.FilePattern.TrimEnd('_');
-                var expectedName = target.AppendDate
-                    ? $"{baseName}_{DateTime.UtcNow:yyyyMMdd}.csv"
-                    : $"{baseName}.csv";
+                var baseName = target.FilePattern.TrimEnd('_');
+
+                // When AppendDate is false AND the pattern already carries an extension
+                // (e.g. "report_2PM.txt"), treat it as the exact blob name so the agent
+                // can monitor non-CSV files and files whose full name is specified by the user.
+                string expectedName;
+                if (!target.AppendDate && baseName.Contains('.'))
+                {
+                    expectedName = baseName;
+                }
+                else
+                {
+                    expectedName = target.AppendDate
+                        ? $"{baseName}_{DateTime.UtcNow:yyyyMMdd}.csv"
+                        : $"{baseName}.csv";
+                }
 
                 var blobClient = containerClient.GetBlobClient(expectedName);
                 bool exists;
