@@ -1,6 +1,7 @@
 using AgentifFlow.Api.Data;
 using AgentifFlow.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace AgentifFlow.Api.Services;
 
@@ -38,6 +39,36 @@ public static class AgentSeedService
         CancellationToken ct = default)
     {
         const string agentName = "Nerandomilast Target Files Monitor";
+
+        // Guard: the Agents table may not yet exist on SQLite DBs that were
+        // pre-created with EnsureCreated before the AddAgents migration.
+        // Attempting to query a non-existent table crashes the startup sequence,
+        // so we check first with a raw pragma — the same pattern used by the
+        // rest of Program.cs's safety-net helpers.
+        if (db.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            var conn = db.Database.GetDbConnection();
+            var shouldClose = conn.State != ConnectionState.Open;
+            if (shouldClose) await conn.OpenAsync(ct);
+            try
+            {
+                using var chk = conn.CreateCommand();
+                chk.CommandText =
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Agents'";
+                var tableExists = Convert.ToInt32(await chk.ExecuteScalarAsync(ct)) > 0;
+                if (!tableExists)
+                {
+                    logger.LogWarning(
+                        "Seed: 'Agents' table not found — skipping demo-agent seed. " +
+                        "Delete the SQLite DB file so a fresh migration can run and create it.");
+                    return;
+                }
+            }
+            finally
+            {
+                if (shouldClose) await conn.CloseAsync();
+            }
+        }
 
         if (await db.Agents.AnyAsync(a => a.Name == agentName, ct))
         {
