@@ -2,6 +2,7 @@ using AgentifFlow.Api.Data;
 using AgentifFlow.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Text.RegularExpressions;
 
 namespace AgentifFlow.Api.Services;
 
@@ -11,26 +12,40 @@ namespace AgentifFlow.Api.Services;
 /// </summary>
 public static class AgentSeedService
 {
+    // File patterns use {date} as a placeholder for the current date (yyyyMMdd).
+    // The BlobWatcherBackgroundService resolves {date} at poll time so the patterns
+    // remain valid each day without manual updates.
+    private static readonly IReadOnlyList<(string Pattern, bool IsRequired)> NerandomilastFileTargets =
+    [
+        ("344_bi_nerandomilast_targets_{date}_{date}_events.txt",   true),
+        ("344_bi_nerandomilast_targets_{date}_{date}_topics.txt",   true),
+        ("344_bi_nerandomilast_targets_{date}_{date}_diseases.txt", true),
+        // Control file is required — its absence triggers the approval workflow.
+        ("344_bi_nerandomilast_targets_{date}_{date}_control.txt",  true),
+    ];
+
     /// <summary>
-    /// Seeds the "Nerandomilast Target Files Monitor" demo agent if it does not already exist.
+    /// Seeds the "Nerandomilast Target Files Monitor" demo agent if it does not already exist,
+    /// or upgrades an existing seeded agent to use dynamic date patterns and the SQL Management skill.
     ///
     /// <para>
-    /// This agent demonstrates a real-world hourly batch-delivery use case:
-    /// <list type="bullet">
-    ///   <item>Four files are expected every hour: <c>events</c>, <c>topics</c>,
-    ///         <c>diseases</c>, and <c>control</c>.</item>
-    ///   <item>The <c>control</c> file is marked as required.  When it is absent the
-    ///         agent sends a human-approval email asking whether a notification should
-    ///         be forwarded to the vendor.</item>
-    ///   <item>Upon the human clicking <em>Approve</em>, the vendor email is sent
-    ///         automatically by the background worker.</item>
-    /// </list>
+    /// File patterns use <c>{date}</c> as a placeholder for today's date (yyyyMMdd) so that
+    /// the agent automatically targets the correct daily batch without manual updates:
+    /// <c>344_bi_nerandomilast_targets_{date}_{date}_events.txt</c> → e.g.
+    /// <c>344_bi_nerandomilast_targets_20260317_20260317_events.txt</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// All four files (events, topics, diseases, control) are marked as required.
+    /// When any file is missing a notification is sent each poll cycle.
+    /// When all files are present and the SQL Management skill is enabled, the data
+    /// is automatically pushed to the configured SQL target table.
     /// </para>
     ///
     /// <para>
     /// For testing, set <c>BlobPollIntervalSeconds = 30</c> in Integration Settings
     /// (simulating the 1-hour production cadence with a 30-second cycle).
-    /// Upload the three data files but omit the control file to trigger the alert.
+    /// Upload the four data files to trigger the SQL push; omit any one file to trigger the alert.
     /// </para>
     /// </summary>
     public static async Task SeedNerandomilastAgentAsync(
@@ -60,7 +75,7 @@ public static class AgentSeedService
                 {
                     logger.LogWarning(
                         "Seed: 'Agents' table not found — skipping demo-agent seed. " +
-                        "Delete the SQLite DB file so a fresh migration can run and create it.");
+                        "The table will be created by the schema safety-net on next startup.");
                     return;
                 }
             }
@@ -70,65 +85,128 @@ public static class AgentSeedService
             }
         }
 
-        if (await db.Agents.AnyAsync(a => a.Name == agentName, ct))
+        var agent = await db.Agents
+            .Include(a => a.FileTargets)
+            .Include(a => a.Skills)
+            .FirstOrDefaultAsync(a => a.Name == agentName, ct);
+
+        if (agent is null)
         {
-            logger.LogDebug("Seed: agent '{Name}' already exists — skipping.", agentName);
-            return;
+            // ── First-time seed ───────────────────────────────────────────────
+            logger.LogInformation("Seed: creating demo agent '{Name}'.", agentName);
+
+            agent = new Agent
+            {
+                Name        = agentName,
+                Description =
+                    "Monitors daily delivery of clinical-trial target files for compound 344-BI-Nerandomilast. " +
+                    "Four files are expected each poll cycle: events, topics, diseases, and control. " +
+                    "File names use the current date (yyyyMMdd) so no manual updates are needed. " +
+                    "All four files are required — if any is missing a notification email is sent. " +
+                    "When all files are present and the SQL Management skill is enabled, the data " +
+                    "is automatically pushed to the configured SQL target table. " +
+                    "Set the global poll interval to 30 s in Integration Settings to simulate the daily cadence during testing.",
+                IsEnabled                = true,
+                NotifyOnFileNotFound     = true,
+                NotifyOnSuccess          = false,
+                NotifyOnDataIssue        = true,
+                MaxRetryCount            = 3,
+                AutoRetryIntervalMinutes = 1,
+                SqlPushEnabled           = false,
+                BlobContainerName        = null,
+                CreatedAt                = DateTime.UtcNow,
+                UpdatedAt                = DateTime.UtcNow,
+            };
+
+            foreach (var (pattern, required) in NerandomilastFileTargets)
+                agent.FileTargets.Add(new AgentFileTarget
+                {
+                    FilePattern = pattern,
+                    AppendDate  = false,
+                    IsRequired  = required,
+                });
+
+            agent.Skills = new List<AgentSkill>
+            {
+                new() { SkillType = nameof(Models.SkillType.EmailMonitoring), IsEnabled = true },
+                new() { SkillType = nameof(Models.SkillType.FileMonitoring),  IsEnabled = true },
+                new() { SkillType = nameof(Models.SkillType.SqlManagement),   IsEnabled = true },
+            };
+
+            db.Agents.Add(agent);
+            await db.SaveChangesAsync(ct);
+
+            logger.LogInformation("Seed: demo agent '{Name}' (Id={Id}) created with {Targets} file targets.",
+                agent.Name, agent.Id, agent.FileTargets.Count);
         }
-
-        logger.LogInformation("Seed: creating demo agent '{Name}'.", agentName);
-
-        var agent = new Agent
+        else
         {
-            Name        = agentName,
-            Description =
-                "Monitors hourly delivery of clinical-trial target files for compound 344-BI-Nerandomilast. " +
-                "Four files are expected each cycle: events, topics, diseases, and control. " +
-                "When the control file is missing the agent sends a human-approval email; " +
-                "upon approval it forwards a vendor notification to the configured address. " +
-                "Set the global poll interval to 30 s in Integration Settings to simulate the 1-hour cadence during testing.",
-            IsEnabled              = true,
-            NotifyOnFileNotFound   = true,
-            NotifyOnSuccess        = false,
-            NotifyOnDataIssue      = true,
-            MaxRetryCount          = 3,
-            AutoRetryIntervalMinutes = 1,   // short retry window — suitable for 30 s test cycles
-            SqlPushEnabled         = false,
-            BlobContainerName      = null,  // inherits global container from Integration Settings
-            CreatedAt              = DateTime.UtcNow,
-            UpdatedAt              = DateTime.UtcNow,
-        };
+            // ── Upgrade existing agent ────────────────────────────────────────
+            bool needsSave = false;
 
-        // ── File targets ─────────────────────────────────────────────────────
-        // Pattern includes the full file name (date + hour baked in for the demo).
-        // Set AppendDate = false and include the extension so the watcher treats
-        // the pattern as an exact blob name — no automatic date or .csv suffix.
-        // Users can clone / edit these targets with real hourly patterns when
-        // deploying to production.
-        agent.FileTargets = new List<AgentFileTarget>
-        {
-            new() { FilePattern = "344_bi_nerandomilast_targets_20260311_20260311_2PM_events.txt",
-                    AppendDate = false, IsRequired = false },
-            new() { FilePattern = "344_bi_nerandomilast_targets_20260311_20260311_2PM_topics.txt",
-                    AppendDate = false, IsRequired = false },
-            new() { FilePattern = "344_bi_nerandomilast_targets_20260311_20260311_2PM_diseases.txt",
-                    AppendDate = false, IsRequired = false },
-            // Control file is required — its absence triggers the approval workflow.
-            new() { FilePattern = "344_bi_nerandomilast_targets_20260311_20260311_2PM_control.txt",
-                    AppendDate = false, IsRequired = true },
-        };
+            // Upgrade file patterns that still contain hardcoded dates (YYYYMMDD format)
+            // or the old time component (e.g. "_2PM_", "_1PM_") to the new {date} placeholder.
+            foreach (var target in agent.FileTargets)
+            {
+                var upgraded = UpgradeFilePattern(target.FilePattern);
+                if (upgraded != target.FilePattern)
+                {
+                    logger.LogInformation(
+                        "Seed: upgrading file pattern '{Old}' → '{New}' for agent '{Name}'.",
+                        target.FilePattern, upgraded, agentName);
+                    target.FilePattern = upgraded;
+                    needsSave = true;
+                }
 
-        // ── Skills ────────────────────────────────────────────────────────────
-        agent.Skills = new List<AgentSkill>
-        {
-            new() { SkillType = nameof(Models.SkillType.EmailMonitoring), IsEnabled = true },
-            new() { SkillType = nameof(Models.SkillType.FileMonitoring),  IsEnabled = true },
-        };
+                // Ensure all targets are marked required (new requirement: notify on any missing file).
+                if (!target.IsRequired)
+                {
+                    target.IsRequired = true;
+                    needsSave = true;
+                }
+            }
 
-        db.Agents.Add(agent);
-        await db.SaveChangesAsync(ct);
+            // Add SqlManagement skill if not already present.
+            if (!agent.Skills.Any(s => s.SkillType == nameof(Models.SkillType.SqlManagement)))
+            {
+                logger.LogInformation(
+                    "Seed: adding SqlManagement skill to existing agent '{Name}'.", agentName);
+                db.AgentSkills.Add(new AgentSkill
+                {
+                    AgentId   = agent.Id,
+                    SkillType = nameof(Models.SkillType.SqlManagement),
+                    IsEnabled = true,
+                });
+                needsSave = true;
+            }
 
-        logger.LogInformation("Seed: demo agent '{Name}' (Id={Id}) created with {Targets} file targets.",
-            agent.Name, agent.Id, agent.FileTargets.Count);
+            if (needsSave)
+            {
+                agent.UpdatedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(ct);
+                logger.LogInformation("Seed: demo agent '{Name}' upgraded.", agentName);
+            }
+            else
+            {
+                logger.LogDebug("Seed: agent '{Name}' already up to date — skipping.", agentName);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Upgrades a legacy hardcoded file pattern to use <c>{date}</c> placeholders.
+    /// Replaces 8-digit date sequences (YYYYMMDD) and removes the time component
+    /// (e.g. <c>_2PM_</c>, <c>_1PM_</c>, <c>_11AM_</c>) that is no longer part of the pattern.
+    /// </summary>
+    private static string UpgradeFilePattern(string pattern)
+    {
+        // Replace sequences of 8 digits (YYYYMMDD) with {date}.
+        var result = Regex.Replace(pattern, @"\d{8}", "{date}");
+
+        // Remove the time component, e.g. "_2PM", "_11AM" that may appear between date and suffix.
+        // Pattern: underscore + 1-2 digits + AM or PM (case-insensitive).
+        result = Regex.Replace(result, @"_\d{1,2}(AM|PM)", string.Empty, RegexOptions.IgnoreCase);
+
+        return result;
     }
 }

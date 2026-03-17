@@ -125,28 +125,41 @@ public class BlobWatcherBackgroundService : BackgroundService
         var mailService       = services.GetRequiredService<IGraphMailService>();
 
         int csvFilesDetected = 0;
+        var pollDate = DateTime.UtcNow;
 
         // ── Per-file-target scanning ──────────────────────────────────────────
         if (agent.FileTargets.Count > 0)
         {
+            // ── SQL gate: when SqlManagement is active, all required files must be
+            //    present before ANY file is pushed to SQL.  Pre-check existence here.
+            var effectiveConfig = agentConfig;
+            if (agentConfig.SqlManagementActive)
+            {
+                bool allRequiredPresent = true;
+                foreach (var target in agent.FileTargets.Where(t => t.IsRequired))
+                {
+                    var requiredName = ResolveFilePattern(target, pollDate);
+                    bool requiredExists;
+                    try { requiredExists = await containerClient.GetBlobClient(requiredName).ExistsAsync(ct); }
+                    catch { requiredExists = false; }
+
+                    if (!requiredExists)
+                    {
+                        allRequiredPresent = false;
+                        _logger.LogInformation(
+                            "Agent '{Name}': required file '{Blob}' not yet present — SQL push deferred until all required files arrive.",
+                            agent.Name, requiredName);
+                        break;
+                    }
+                }
+
+                if (!allRequiredPresent)
+                    effectiveConfig = agentConfig with { SkillSqlManagement = false };
+            }
+
             foreach (var target in agent.FileTargets)
             {
-                var baseName = target.FilePattern.TrimEnd('_');
-
-                // When AppendDate is false AND the pattern already carries an extension
-                // (e.g. "report_2PM.txt"), treat it as the exact blob name so the agent
-                // can monitor non-CSV files and files whose full name is specified by the user.
-                string expectedName;
-                if (!target.AppendDate && baseName.Contains('.'))
-                {
-                    expectedName = baseName;
-                }
-                else
-                {
-                    expectedName = target.AppendDate
-                        ? $"{baseName}_{DateTime.UtcNow:yyyyMMdd}.csv"
-                        : $"{baseName}.csv";
-                }
+                var expectedName = ResolveFilePattern(target, pollDate);
 
                 var blobClient = containerClient.GetBlobClient(expectedName);
                 bool exists;
@@ -171,9 +184,9 @@ public class BlobWatcherBackgroundService : BackgroundService
                 if (await jobService.ExistsAsync(expectedName, agentConfig.BlobContainerName))
                     continue;
 
-                _logger.LogInformation("Agent '{Name}': new CSV detected: {Blob}", agent.Name, expectedName);
+                _logger.LogInformation("Agent '{Name}': new file detected: {Blob}", agent.Name, expectedName);
                 var job = await jobService.CreateAsync(expectedName, agentConfig.BlobContainerName, agent.Id);
-                await ProcessBlobAsync(job, expectedName, containerClient, agentConfig,
+                await ProcessBlobAsync(job, expectedName, containerClient, effectiveConfig,
                     jobService, csvValidation, llmService, mailService, ct);
             }
         }
@@ -942,6 +955,35 @@ public class BlobWatcherBackgroundService : BackgroundService
     // ──────────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Resolves a file target's pattern into the expected blob name for the given poll date.
+    /// <list type="bullet">
+    ///   <item><c>{date}</c> placeholders are replaced with <paramref name="date"/> formatted as <c>yyyyMMdd</c>.</item>
+    ///   <item>When <see cref="AgentFileTarget.AppendDate"/> is <c>false</c> and the pattern already
+    ///         contains a file extension, the resolved pattern is used as the exact blob name.</item>
+    ///   <item>Otherwise the date is appended as a suffix, and <c>.csv</c> is added when no extension is present.</item>
+    /// </list>
+    /// </summary>
+    private static string ResolveFilePattern(AgentFileTarget target, DateTime date)
+    {
+        var dateStr  = date.ToString("yyyyMMdd");
+        var baseName = target.FilePattern.TrimEnd('_');
+
+        // Substitute {date} placeholder (case-insensitive) before any other processing.
+        baseName = baseName.Replace("{date}", dateStr, StringComparison.OrdinalIgnoreCase);
+
+        // When AppendDate is false AND the pattern already carries an extension
+        // (e.g. "report_{date}.txt" after substitution, or an exact blob name),
+        // treat it as the final blob name without further modification.
+        if (!target.AppendDate && baseName.Contains('.'))
+            return baseName;
+
+        // Legacy AppendDate behaviour: suffix the date and add .csv when no extension.
+        return target.AppendDate
+            ? $"{baseName}_{dateStr}.csv"
+            : $"{baseName}.csv";
+    }
 
     /// <summary>
     /// Returns the UTC timestamp after which the job should be automatically retried,
