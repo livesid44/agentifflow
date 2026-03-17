@@ -451,4 +451,242 @@ public static class AgentSeedService
         logger.LogInformation(
             "Startup probe: created {Count} probe job(s).", agents.Count);
     }
+
+    // ── Demo monitored jobs ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Seeds sample <see cref="MonitoredJob"/> rows so the Job Monitor tab is populated
+    /// out-of-the-box for demonstration purposes.  Jobs reflect realistic pipeline
+    /// scenarios for both seeded demo agents:
+    /// <list type="bullet">
+    ///   <item>Agent 1 – Nerandomilast BI pipeline jobs that produce the daily target files.</item>
+    ///   <item>Agent 2 – Azkaban-style orchestration jobs monitored by the Azkaban Job Monitor.</item>
+    /// </list>
+    /// This method is idempotent: it skips seeding when the <c>MonitoredJobs</c> table
+    /// already contains rows so that manually added jobs are never overwritten.
+    /// </summary>
+    public static async Task SeedDemoMonitoredJobsAsync(
+        AgentifFlowDbContext db,
+        ILogger logger,
+        CancellationToken ct = default)
+    {
+        // Guard: skip if jobs already exist (idempotent).
+        if (await db.MonitoredJobs.AnyAsync(ct))
+        {
+            logger.LogDebug("Demo monitored jobs: table already has rows — skipping seed.");
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+
+        // ── Agent 1 — Nerandomilast BI pipeline jobs ──────────────────────────
+        // These represent the upstream ETL jobs that generate the daily target
+        // files consumed by the "Nerandomilast Target Files Monitor" agent.
+
+        var nrmJobs = new List<MonitoredJob>
+        {
+            new()
+            {
+                JobName       = "NRM-BI-ClinicalDB-Extract",
+                ProjectName   = "Nerandomilast-Phase2-BI",
+                Status        = MonitoredJobStatus.Success,
+                StartedAt     = now.AddHours(-5),
+                CompletedAt   = now.AddHours(-4.5),
+                UpdatedAt     = now.AddHours(-4.5),
+                Logs          = BuildLog(now.AddHours(-5),
+                    ("INFO",  "JobRunner",    "Starting job 'NRM-BI-ClinicalDB-Extract'"),
+                    ("INFO",  "DBConnector",  "Connected to ClinicalTrialDB @ clinicaldb.internal:1433"),
+                    ("INFO",  "Extractor",    "Extracting adverse-event records for study NRM-001-Phase2"),
+                    ("INFO",  "Extractor",    "Query returned 12 rows (PatientId, EventDate, AECode, …)"),
+                    ("INFO",  "FileWriter",   $"Writing 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_events.txt"),
+                    ("INFO",  "FileWriter",   "File written: 12 data rows + header"),
+                    ("INFO",  "Extractor",    "Extracting disease / indication reference data"),
+                    ("INFO",  "Extractor",    "Query returned 7 rows (DiseaseCode, DiseaseName, ICD10Code, …)"),
+                    ("INFO",  "FileWriter",   $"Writing 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_diseases.txt"),
+                    ("INFO",  "FileWriter",   "File written: 7 data rows + header"),
+                    ("INFO",  "Extractor",    "Extracting active discussion topics and action items"),
+                    ("INFO",  "Extractor",    "Query returned 10 rows (TopicId, TopicName, Category, Priority, …)"),
+                    ("INFO",  "FileWriter",   $"Writing 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_topics.txt"),
+                    ("INFO",  "FileWriter",   "File written: 10 data rows + header"),
+                    ("INFO",  "JobRunner",    "Job 'NRM-BI-ClinicalDB-Extract' completed successfully (exit code 0)"))
+            },
+            new()
+            {
+                JobName       = "NRM-BI-ControlManifest-Generate",
+                ProjectName   = "Nerandomilast-Phase2-BI",
+                Status        = MonitoredJobStatus.Success,
+                StartedAt     = now.AddHours(-4.5),
+                CompletedAt   = now.AddHours(-4.4),
+                UpdatedAt     = now.AddHours(-4.4),
+                Logs          = BuildLog(now.AddHours(-4.5),
+                    ("INFO",  "JobRunner",    "Starting job 'NRM-BI-ControlManifest-Generate'"),
+                    ("INFO",  "Checksummer",  $"Computing MD5 for 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_events.txt → a3f8d2c91b45e7f06d18c3a22b574e01"),
+                    ("INFO",  "Checksummer",  $"Computing MD5 for 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_topics.txt → 7bc945d3e12a0f87c6d45e91a38b20ff"),
+                    ("INFO",  "Checksummer",  $"Computing MD5 for 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_diseases.txt → 2e6a1d84c73b950f4a12d8e57c29b3aa"),
+                    ("INFO",  "FileWriter",   $"Writing 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_control.txt"),
+                    ("INFO",  "FileWriter",   "Control manifest written: 3 data rows + header"),
+                    ("INFO",  "JobRunner",    "Job 'NRM-BI-ControlManifest-Generate' completed successfully (exit code 0)"))
+            },
+            new()
+            {
+                JobName       = "NRM-BI-BlobUpload",
+                ProjectName   = "Nerandomilast-Phase2-BI",
+                Status        = MonitoredJobStatus.Success,
+                StartedAt     = now.AddHours(-4.4),
+                CompletedAt   = now.AddHours(-4.3),
+                UpdatedAt     = now.AddHours(-4.3),
+                Logs          = BuildLog(now.AddHours(-4.4),
+                    ("INFO",  "JobRunner",    "Starting job 'NRM-BI-BlobUpload'"),
+                    ("INFO",  "BlobClient",   "Connecting to Azure Blob Storage container 'nerandomilast-targets'"),
+                    ("INFO",  "BlobClient",   $"Uploading 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_events.txt (2.3 KB)"),
+                    ("INFO",  "BlobClient",   $"Uploading 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_diseases.txt (1.1 KB)"),
+                    ("INFO",  "BlobClient",   $"Uploading 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_topics.txt (1.9 KB)"),
+                    ("INFO",  "BlobClient",   $"Uploading 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_control.txt (0.4 KB)"),
+                    ("INFO",  "BlobClient",   "All 4 files uploaded successfully"),
+                    ("INFO",  "JobRunner",    "Job 'NRM-BI-BlobUpload' completed successfully (exit code 0)"))
+            },
+            new()
+            {
+                JobName       = "NRM-BI-DataValidation-PostProcess",
+                ProjectName   = "Nerandomilast-Phase2-BI",
+                Status        = MonitoredJobStatus.Failed,
+                FailureReason = "Schema validation failed: column 'CausalityRating' has 2 NULL values in events file (PT-003, PT-009). Expected non-null per protocol NRM-001-v4.2 §8.3.",
+                StartedAt     = now.AddHours(-3),
+                CompletedAt   = now.AddHours(-2.9),
+                UpdatedAt     = now.AddHours(-2.9),
+                Logs          = BuildLog(now.AddHours(-3),
+                    ("INFO",  "JobRunner",    "Starting job 'NRM-BI-DataValidation-PostProcess'"),
+                    ("INFO",  "Validator",    $"Loading 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_events.txt"),
+                    ("INFO",  "Validator",    "Running schema checks against protocol NRM-001-v4.2 §8.3"),
+                    ("WARN",  "Validator",    "Row PT-003: CausalityRating is NULL — expected non-null (SAE record)"),
+                    ("WARN",  "Validator",    "Row PT-009: CausalityRating is NULL — expected non-null (SAE record)"),
+                    ("ERROR", "Validator",    "Schema validation FAILED: 2 NULL values in required column 'CausalityRating'"),
+                    ("INFO",  "Validator",    "Checking diseases file … OK (7 rows, all required columns populated)"),
+                    ("INFO",  "Validator",    "Checking topics file … OK (10 rows)"),
+                    ("ERROR", "JobRunner",    "Job 'NRM-BI-DataValidation-PostProcess' failed: schema validation errors in events file"),
+                    ("INFO",  "JobRunner",    "Job status set to FAILED (exit code 1)"))
+            },
+        };
+
+        // ── Agent 2 — Azkaban-style orchestration jobs ────────────────────────
+        // These are the jobs that the "Azkaban Job Monitor" agent watches via the
+        // ThirdPartyApiIntegration skill (polling GET /api/jobmonitor/status).
+
+        var azkJobs = new List<MonitoredJob>
+        {
+            new()
+            {
+                JobName       = "AZK-ClinicalTrial-MasterDataSync",
+                ProjectName   = "Azkaban-ClinicalOps",
+                Status        = MonitoredJobStatus.Success,
+                StartedAt     = now.AddHours(-6),
+                CompletedAt   = now.AddHours(-5.8),
+                UpdatedAt     = now.AddHours(-5.8),
+                Logs          = BuildLog(now.AddHours(-6),
+                    ("INFO",  "Azkaban",      "Flow 'AZK-ClinicalTrial-MasterDataSync' started"),
+                    ("INFO",  "StageA",       "Syncing patient master records from ClinicalTrialDB → DataWarehouse"),
+                    ("INFO",  "StageA",       "172 patient records synced (0 errors)"),
+                    ("INFO",  "StageB",       "Syncing site master data (SITE-101 → SITE-106)"),
+                    ("INFO",  "StageB",       "6 site records synced"),
+                    ("INFO",  "StageC",       "Refreshing study-arm enrollment counts"),
+                    ("INFO",  "StageC",       "NerandomilastArm: 87 patients | PlaceboArm: 85 patients"),
+                    ("INFO",  "Azkaban",      "Flow completed successfully — duration 12 min"))
+            },
+            new()
+            {
+                JobName       = "AZK-AE-Aggregation-Daily",
+                ProjectName   = "Azkaban-ClinicalOps",
+                Status        = MonitoredJobStatus.Success,
+                StartedAt     = now.AddHours(-5),
+                CompletedAt   = now.AddHours(-4.7),
+                UpdatedAt     = now.AddHours(-4.7),
+                Logs          = BuildLog(now.AddHours(-5),
+                    ("INFO",  "Azkaban",      "Flow 'AZK-AE-Aggregation-Daily' started"),
+                    ("INFO",  "AEProcessor",  "Aggregating adverse-event records for reporting date " + now.ToString("yyyy-MM-dd")),
+                    ("INFO",  "AEProcessor",  "Total AEs processed: 12 (9 Mild/Moderate, 2 Severe, 1 SAE)"),
+                    ("INFO",  "AEProcessor",  "Causality breakdown: Probable=4, Possible=4, Unrelated=4"),
+                    ("INFO",  "AEProcessor",  "Ongoing AEs: 3 (AE-4823×2, AE-6634×1)"),
+                    ("INFO",  "Reporter",     "Generating daily AE summary report"),
+                    ("INFO",  "Reporter",     "Report written to reports/ae_daily_" + now.ToString("yyyyMMdd") + ".pdf"),
+                    ("INFO",  "Azkaban",      "Flow completed successfully — duration 18 min"))
+            },
+            new()
+            {
+                JobName       = "AZK-ReportGen-Weekly-Safety",
+                ProjectName   = "Azkaban-ClinicalOps",
+                Status        = MonitoredJobStatus.Running,
+                StartedAt     = now.AddMinutes(-25),
+                CompletedAt   = null,
+                UpdatedAt     = now.AddMinutes(-5),
+                Logs          = BuildLog(now.AddMinutes(-25),
+                    ("INFO",  "Azkaban",      "Flow 'AZK-ReportGen-Weekly-Safety' started"),
+                    ("INFO",  "DataLoader",   "Loading 4-week AE dataset (2026-02-17 → 2026-03-17)"),
+                    ("INFO",  "DataLoader",   "Loaded 47 adverse-event records across 4 weeks"),
+                    ("INFO",  "StatEngine",   "Running statistical summaries (incidence rates, confidence intervals)"),
+                    ("INFO",  "StatEngine",   "Cough (AE-4823) incidence: 28% NerandomilastArm vs 0% PlaceboArm — flagged for DSMB"),
+                    ("INFO",  "PDFRenderer",  "Rendering weekly safety report … [IN PROGRESS]"))
+            },
+            new()
+            {
+                JobName       = "AZK-FileTransfer-Landing-Zone",
+                ProjectName   = "Azkaban-DataOps",
+                Status        = MonitoredJobStatus.Failed,
+                FailureReason = "Missing required input file: 344_bi_nerandomilast_targets file not found (wrong vendor prefix in delivered file).",
+                StartedAt     = now.AddHours(-2),
+                CompletedAt   = now.AddHours(-1.9),
+                UpdatedAt     = now.AddHours(-1.9),
+                Logs          = BuildLog(now.AddHours(-2),
+                    ("INFO",  "Azkaban",      "Flow 'AZK-FileTransfer-Landing-Zone' started"),
+                    ("INFO",  "FileCheck",    "Scanning landing zone for expected input files"),
+                    ("INFO",  "FileCheck",    $"Expected pattern: 344_bi_nerandomilast_targets_([0-9]{{8}})_([0-9]{{8}})_diseases"),
+                    ("WARN",  "FileCheck",    $"Pattern NOT matched. Closest candidate: 344_bi_Jascayd_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_diseases.txt"),
+                    ("ERROR", "FileCheck",    $"Required file 344_bi_nerandomilast_targets_{now:yyyyMMdd}_{now:yyyyMMdd}_diseases.txt not found in container"),
+                    ("INFO",  "FileCheck",    "Checked also: events.txt ✓  topics.txt ✓  control.txt ✓  diseases.txt ✗"),
+                    ("ERROR", "Azkaban",      "Flow 'AZK-FileTransfer-Landing-Zone' failed: Missing required input file"),
+                    ("INFO",  "Azkaban",      "Flow status set to FAILED (exit code 1)"))
+            },
+            new()
+            {
+                JobName       = "AZK-SQL-TargetTable-Refresh",
+                ProjectName   = "Azkaban-DataOps",
+                Status        = MonitoredJobStatus.Skipped,
+                FailureReason = "Skipped: upstream job 'AZK-FileTransfer-Landing-Zone' failed. SQL refresh requires all 4 target files.",
+                StartedAt     = now.AddHours(-1.9),
+                CompletedAt   = now.AddHours(-1.9),
+                UpdatedAt     = now.AddHours(-1.9),
+                Logs          = BuildLog(now.AddHours(-1.9),
+                    ("WARN",  "Azkaban",      "Flow 'AZK-SQL-TargetTable-Refresh' skipped — upstream dependency failed"),
+                    ("INFO",  "Dependency",   "Upstream: AZK-FileTransfer-Landing-Zone → FAILED"),
+                    ("INFO",  "Dependency",   "SQL refresh requires all 4 target files to be present in blob container"),
+                    ("WARN",  "Azkaban",      "Flow status set to SKIPPED"))
+            },
+        };
+
+        db.MonitoredJobs.AddRange(nrmJobs);
+        db.MonitoredJobs.AddRange(azkJobs);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation(
+            "Demo monitored jobs: seeded {NrmCount} Nerandomilast pipeline jobs and {AzkCount} Azkaban jobs.",
+            nrmJobs.Count, azkJobs.Count);
+    }
+
+    /// <summary>
+    /// Builds a multi-line log string from an array of (level, component, message) tuples,
+    /// stamping each line with an incrementally offset timestamp.
+    /// </summary>
+    private static string BuildLog(
+        DateTime baseTime,
+        params (string Level, string Component, string Message)[] entries)
+    {
+        var lines = new System.Text.StringBuilder();
+        for (int i = 0; i < entries.Length; i++)
+        {
+            var (level, component, message) = entries[i];
+            var ts = baseTime.AddSeconds(i * 8);
+            lines.AppendLine(
+                $"[{ts:yyyy-MM-dd HH:mm:ss}] {level,-5} {component,-12} - {message}");
+        }
+        return lines.ToString().TrimEnd();
+    }
 }

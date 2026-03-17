@@ -319,6 +319,13 @@ using (var scope = app.Services.CreateScope())
         await AgentifFlow.Api.Services.AgentSeedService.SeedAzkabanJobMonitorAgentAsync(
             db, startupLogger, CancellationToken.None);
 
+        // ── Demo monitored jobs (Job Monitor tab sample data) ─────────────────
+        // Seeds a set of realistic MonitoredJob rows for both demo agents so the
+        // Job Monitor tab is populated out-of-the-box.  Skipped if any jobs
+        // already exist so manually created jobs are never overwritten.
+        await AgentifFlow.Api.Services.AgentSeedService.SeedDemoMonitoredJobsAsync(
+            db, startupLogger, CancellationToken.None);
+
         // ── Startup probe jobs (one per enabled agent) ────────────────────────
         // For agents that require AI (LogAnalysis skill), the probe job is marked
         // Failed with "No AI configuration found" when OpenAI has not been set up.
