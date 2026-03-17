@@ -1,0 +1,4 @@
+FileName,RecordCount,GeneratedTimestamp,GeneratedBy,DataVersion,SourceSystem,Checksum_MD5,Status,ValidationStatus,Notes
+344_bi_nerandomilast_targets_20260317_20260317_events.txt,12,2026-03-17T04:00:00Z,BiPipeline_v3.2,4.1,ClinicalTrialDB,a3f8d2c91b45e7f06d18c3a22b574e01,Ready,Pending,Daily batch for 17-Mar-2026
+344_bi_nerandomilast_targets_20260317_20260317_topics.txt,10,2026-03-17T04:00:00Z,BiPipeline_v3.2,4.1,TrialManagementSystem,7bc945d3e12a0f87c6d45e91a38b20ff,Ready,Pending,Daily batch for 17-Mar-2026
+344_bi_nerandomilast_targets_20260317_20260317_diseases.txt,7,2026-03-17T04:00:00Z,BiPipeline_v3.2,4.1,ClinicalTrialDB,2e6a1d84c73b950f4a12d8e57c29b3aa,Ready,Pending,Daily batch for 17-Mar-2026

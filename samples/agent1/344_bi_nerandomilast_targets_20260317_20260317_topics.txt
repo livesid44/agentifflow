@@ -1,0 +1,11 @@
+TopicId,TopicName,Category,Priority,AssignedTo,DueDate,Status,CreatedDate,LastModifiedDate,DiscussionCount,Resolution,Tags,RelatedProtocol,ImpactLevel,Notes
+TOP-001,Dose Escalation Review,Safety,High,Dr. Chen,2026-03-20,Open,2026-02-01,2026-03-15,5,,safety;dosing,NRM-001-Phase2,High,Pending DSMB sign-off
+TOP-002,PK/PD Data Harmonisation,Pharmacology,Medium,Dr. Patel,2026-03-25,InProgress,2026-02-05,2026-03-14,3,,pk;pd;harmonisation,NRM-001-Phase2,Medium,Requires biostatistics input
+TOP-003,Site Enrollment Lag – SITE-104,Enrollment,High,Dr. Lopez,2026-03-18,Open,2026-03-01,2026-03-16,8,,enrollment;site,NRM-001-Phase2,High,Screen failure rate elevated at 34%
+TOP-004,Cough AE Cluster Analysis,Safety,High,Dr. Kim,2026-03-22,InProgress,2026-03-05,2026-03-16,12,,cough;ae;cluster,NRM-001-Phase2,High,AE-4823 reported by 28% of active arm
+TOP-005,Biomarker Panel Update,Translational,Low,Dr. Singh,2026-04-01,Open,2026-02-20,2026-03-10,2,,biomarker;translational,NRM-001-Phase2,Low,SP-D and KL-6 added to protocol v4
+TOP-006,eCRF Data Lock Schedule,Data Management,Medium,Dr. Nguyen,2026-03-30,Open,2026-03-08,2026-03-15,4,,data;ecrf;lock,NRM-001-Phase2,Medium,Vendor confirmation pending
+TOP-007,ICF Version 4 Rollout,Regulatory,High,Dr. Chen,2026-03-19,InProgress,2026-03-12,2026-03-17,6,,icf;consent;regulatory,NRM-001-Phase2,High,All sites must update by due date
+TOP-008,FVC Decline Adjudication,Efficacy,High,Dr. Kim,2026-04-05,Open,2026-03-14,2026-03-16,3,,fvc;adjudication;efficacy,NRM-001-Phase2,High,Endpoint committee review scheduled
+TOP-009,Supply Chain – Drug Shortage Risk,Operations,Critical,Dr. Patel,2026-03-18,Open,2026-03-16,2026-03-17,9,,supply;drug;shortage,NRM-001-Phase2,Critical,Batch #B0043 delayed at customs
+TOP-010,SAE Narrative Review,Safety,High,Dr. Nguyen,2026-03-21,InProgress,2026-03-14,2026-03-17,7,,sae;narrative;safety,NRM-001-Phase2,High,SAE-0088 and SAE-0212 under review

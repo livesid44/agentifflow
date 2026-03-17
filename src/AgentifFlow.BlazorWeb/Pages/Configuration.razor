@@ -149,6 +149,13 @@ else
         <MudTabPanel Text="Blob Storage" Icon="@Icons.Material.Outlined.CloudQueue" Class="pa-6">
             <MudGrid Spacing="3">
                 <MudItem xs="12">
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">
+                        <strong>Sample connection strings:</strong><br />
+                        <code>DefaultEndpointsProtocol=https;AccountName=mystorageaccount;AccountKey=base64key==;EndpointSuffix=core.windows.net</code><br />
+                        <em style="font-size:0.78rem;">Azure Blob Storage (account key)</em><br /><br />
+                        <code>UseDevelopmentStorage=true</code><br />
+                        <em style="font-size:0.78rem;">Azurite local emulator</em>
+                    </MudAlert>
                     <MudTextField @bind-Value="_blobConnStr"
                                   Label="Connection String"
                                   InputType="InputType.Password"

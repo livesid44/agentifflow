@@ -1,0 +1,13 @@
+PatientId,EventDate,EventType,AECode,AETerm,Severity,Grade,StudyArm,SiteId,VisitNumber,AssessedBy,IsSerious,Resolution,Duration_Days,DrugDose_mg,CausalityRating,OutcomeCode,OnStudyDrug,ActionTaken,ReportedDate
+PT-001,2026-03-01,AdverseEvent,AE-4823,Cough,Mild,1,NerandomilastArm,SITE-101,V3,Dr. Chen,No,Resolved,7,9.0,Possible,AE-RESOLVED,Yes,None,2026-03-02
+PT-002,2026-03-02,AdverseEvent,AE-5102,Fatigue,Moderate,2,PlaceboArm,SITE-102,V4,Dr. Patel,No,Resolved,10,0.0,Unrelated,AE-RESOLVED,Yes,DoseReduction,2026-03-03
+PT-003,2026-03-05,SeriousAdverseEvent,SAE-0088,Dyspnea,Severe,3,NerandomilastArm,SITE-103,V5,Dr. Kim,Yes,Ongoing,21,9.0,Probable,SAE-ONGOING,Yes,DrugInterrupted,2026-03-06
+PT-004,2026-03-07,AdverseEvent,AE-3391,Nausea,Mild,1,NerandomilastArm,SITE-101,V3,Dr. Chen,No,Resolved,3,9.0,Possible,AE-RESOLVED,Yes,None,2026-03-07
+PT-005,2026-03-08,AdverseEvent,AE-7712,Headache,Mild,1,PlaceboArm,SITE-104,V4,Dr. Lopez,No,Resolved,5,0.0,Unrelated,AE-RESOLVED,Yes,None,2026-03-09
+PT-006,2026-03-10,AdverseEvent,AE-4823,Cough,Moderate,2,NerandomilastArm,SITE-102,V5,Dr. Patel,No,Ongoing,14,9.0,Probable,AE-ONGOING,Yes,None,2026-03-10
+PT-007,2026-03-11,AdverseEvent,AE-2267,Dizziness,Mild,1,PlaceboArm,SITE-103,V2,Dr. Kim,No,Resolved,2,0.0,Unrelated,AE-RESOLVED,Yes,None,2026-03-12
+PT-008,2026-03-12,AdverseEvent,AE-9901,Rash,Moderate,2,NerandomilastArm,SITE-101,V6,Dr. Chen,No,Resolved,8,9.0,Possible,AE-RESOLVED,Yes,None,2026-03-13
+PT-009,2026-03-14,SeriousAdverseEvent,SAE-0212,Hospitalization,Severe,4,NerandomilastArm,SITE-105,V7,Dr. Nguyen,Yes,Resolved,15,9.0,Probable,SAE-RESOLVED,No,DrugWithdrawn,2026-03-14
+PT-010,2026-03-15,AdverseEvent,AE-6634,Insomnia,Mild,1,PlaceboArm,SITE-104,V5,Dr. Lopez,No,Ongoing,9,0.0,Unrelated,AE-ONGOING,Yes,None,2026-03-16
+PT-011,2026-03-15,AdverseEvent,AE-4823,Cough,Mild,1,NerandomilastArm,SITE-106,V3,Dr. Singh,No,Resolved,4,9.0,Possible,AE-RESOLVED,Yes,None,2026-03-16
+PT-012,2026-03-16,AdverseEvent,AE-3391,Nausea,Moderate,2,NerandomilastArm,SITE-101,V4,Dr. Chen,No,Resolved,6,9.0,Probable,AE-RESOLVED,Yes,None,2026-03-17
