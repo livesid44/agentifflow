@@ -103,11 +103,23 @@ else if (_jobs.Count == 0)
 {
     <MudAlert Severity="Severity.Info">
         No jobs found. Enable Agent Flow in <MudLink Href="/agent-configuration">Agent Configuration</MudLink>
-        and upload a CSV file to your configured Blob container.
+        to activate the agents. Startup probe jobs will appear here automatically on the next application start.
     </MudAlert>
 }
 else
 {
+    @* ── Startup-probe failure banners ──────────────────────────────────────── *@
+    @foreach (var probe in _failedStartupProbes)
+    {
+        var agentLabel = probe.AgentId.HasValue
+            ? (_agents.FirstOrDefault(a => a.Id == probe.AgentId.Value)?.Name ?? $"Agent #{probe.AgentId}")
+            : "Agent";
+        <MudAlert Severity="Severity.Error" Class="mb-3" Icon="@Icons.Material.Outlined.Warning">
+            <strong>@agentLabel — Startup probe failed:</strong> @probe.ErrorMessage
+            &nbsp;<MudLink Href="/configuration">Go to Integration Settings →</MudLink>
+        </MudAlert>
+    }
+
     <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight:700;">Agent Jobs</MudText>
     <MudTable Items="_filteredJobs" Hover="true" Dense="true" Striped="true"
               SortLabel="Sort By" Elevation="2" Class="mb-8">
@@ -256,6 +268,8 @@ else
 </MudDialog>
 
 @code {
+    private const string StartupProbeBlobName = "[startup-probe]";
+
     private List<BlobWatcherJobDto> _jobs = [];
     private List<BlobWatcherJobDto> _filteredJobs => _selectedAgentId switch
     {
@@ -263,6 +277,14 @@ else
         -1    => _jobs.Where(j => j.AgentId == null).ToList(),
         { } id => _jobs.Where(j => j.AgentId == id).ToList(),
     };
+
+    /// <summary>Most-recent startup-probe job per agent that has status "Failed".</summary>
+    private List<BlobWatcherJobDto> _failedStartupProbes => _jobs
+        .Where(j => j.BlobName == StartupProbeBlobName && j.Status == "Failed")
+        .GroupBy(j => j.AgentId)
+        .Select(g => g.OrderByDescending(j => j.DetectedAt).First())
+        .ToList();
+
     private List<ActivityLogEntry> _activityLog = [];
     private bool _loading;
     private string? _error;
@@ -428,6 +450,20 @@ else
 
         foreach (var job in _jobs)
         {
+            // Startup-probe events get their own source label
+            if (job.BlobName == StartupProbeBlobName)
+            {
+                var agentLabel = job.AgentId.HasValue
+                    ? (_agents.FirstOrDefault(a => a.Id == job.AgentId.Value)?.Name ?? $"Agent #{job.AgentId}")
+                    : "Agent";
+                var probeDetail = job.Status == "Failed"
+                    ? $"{agentLabel} — {job.ErrorMessage ?? "startup probe failed"}"
+                    : $"{agentLabel} — startup probe: agent is active";
+                entries.Add(new ActivityLogEntry(
+                    job.DetectedAt, "Startup", job.Status == "Failed" ? "Config Error" : "Ready", probeDetail));
+                continue;
+            }
+
             // Blob detected event
             entries.Add(new ActivityLogEntry(
                 job.DetectedAt, "Blob Watcher", "Detected",
@@ -532,6 +568,7 @@ else
         "API Call"     => Color.Secondary,
         "Blob Watcher" => Color.Info,
         "Agent"        => Color.Primary,
+        "Startup"      => Color.Warning,
         _              => Color.Default,
     };
 

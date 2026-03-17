@@ -318,6 +318,12 @@ using (var scope = app.Services.CreateScope())
             db, startupLogger, CancellationToken.None);
         await AgentifFlow.Api.Services.AgentSeedService.SeedAzkabanJobMonitorAgentAsync(
             db, startupLogger, CancellationToken.None);
+
+        // ── Startup probe jobs (one per enabled agent) ────────────────────────
+        // For agents that require AI (LogAnalysis skill), the probe job is marked
+        // Failed with "No AI configuration found" when OpenAI has not been set up.
+        await AgentifFlow.Api.Services.AgentSeedService.SeedStartupJobsAsync(
+            db, startupLogger, CancellationToken.None);
     }
     catch (Exception ex)
     {

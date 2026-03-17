@@ -354,4 +354,100 @@ public static class AgentSeedService
         logger.LogInformation(
             "Seed: demo agent '{Name}' (Id={Id}) created.", agent.Name, agent.Id);
     }
+
+    // ── Startup probe jobs ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Sentinel blob name used for startup-probe jobs so they are recognisable in the dashboard.
+    /// </summary>
+    public const string StartupProbeBlobName = "[startup-probe]";
+
+    /// <summary>
+    /// Creates a startup-probe <see cref="BlobWatcherJob"/> for every enabled agent.
+    /// <list type="bullet">
+    ///   <item>Agents with the <see cref="SkillType.LogAnalysis"/> skill require Azure OpenAI to be
+    ///   configured.  When the OpenAI endpoint or API key are absent the probe job is immediately
+    ///   set to <see cref="BlobWatcherJobStatus.Failed"/> with an error of
+    ///   "No AI configuration found."</item>
+    ///   <item>All other agents get a <see cref="BlobWatcherJobStatus.Detected"/> probe to confirm
+    ///   the agent is active.</item>
+    /// </list>
+    /// A new probe is inserted on every application startup so operators can track startup history.
+    /// </summary>
+    public static async Task SeedStartupJobsAsync(
+        AgentifFlowDbContext db,
+        ILogger logger,
+        CancellationToken ct = default)
+    {
+        // Read AI config once so we only query the DB once per startup.
+        var appConfig   = await db.AppConfigurations.FirstOrDefaultAsync(ct);
+        bool aiReady    = !string.IsNullOrWhiteSpace(appConfig?.OpenAiEndpoint)
+                       && !string.IsNullOrWhiteSpace(appConfig?.OpenAiApiKey);
+
+        var agents = await db.Agents
+            .Include(a => a.Skills)
+            .Where(a => a.IsEnabled)
+            .ToListAsync(ct);
+
+        if (agents.Count == 0)
+        {
+            logger.LogDebug("Startup probe: no enabled agents found — skipping.");
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+
+        foreach (var agent in agents)
+        {
+            bool needsAi = agent.Skills.Any(s =>
+                s.SkillType == nameof(Models.SkillType.LogAnalysis) && s.IsEnabled);
+
+            BlobWatcherJobStatus probeStatus;
+            string?              errorMessage;
+            string               logEntry;
+
+            if (needsAi && !aiReady)
+            {
+                probeStatus  = BlobWatcherJobStatus.Failed;
+                errorMessage = "No AI configuration found. Please configure the Azure OpenAI " +
+                               "endpoint, API key and deployment name on the Integration Settings page.";
+                logEntry     = $"[{now:u}] Startup probe — agent '{agent.Name}': " +
+                               "LogAnalysis skill is enabled but no Azure OpenAI configuration was found. " +
+                               "Configure AI settings to enable automated log analysis.";
+                logger.LogWarning(
+                    "Startup probe: agent '{Name}' (Id={Id}) requires AI but OpenAI is not configured.",
+                    agent.Name, agent.Id);
+            }
+            else
+            {
+                probeStatus  = BlobWatcherJobStatus.Detected;
+                errorMessage = null;
+                logEntry     = $"[{now:u}] Startup probe — agent '{agent.Name}': " +
+                               "agent is enabled and ready.";
+                logger.LogInformation(
+                    "Startup probe: agent '{Name}' (Id={Id}) is ready.",
+                    agent.Name, agent.Id);
+            }
+
+            var job = new BlobWatcherJob
+            {
+                BlobName     = StartupProbeBlobName,
+                ContainerName = null,
+                AgentId      = agent.Id,
+                Status       = probeStatus,
+                ErrorMessage = errorMessage,
+                LogDetails   = logEntry,
+                DetectedAt   = now,
+                UpdatedAt    = now,
+                CompletedAt  = probeStatus == BlobWatcherJobStatus.Failed ? now : null,
+            };
+
+            db.BlobWatcherJobs.Add(job);
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation(
+            "Startup probe: created {Count} probe job(s).", agents.Count);
+    }
 }
