@@ -562,7 +562,9 @@ public class BlobWatcherBackgroundService : BackgroundService
             if (job.Status == BlobWatcherJobStatus.AwaitingLogConfirmation ||
                 job.Status == BlobWatcherJobStatus.AwaitingPocApproval)
             {
-                bool rejected = reply.BodyPreview?.Contains("reject", StringComparison.OrdinalIgnoreCase) == true;
+                bool rejected = System.Text.RegularExpressions.Regex.IsMatch(
+                    reply.BodyPreview ?? string.Empty,
+                    @"^\s*reject\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Multiline);
                 if (rejected)
                 {
                     await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Rejected,
@@ -889,8 +891,12 @@ public class BlobWatcherBackgroundService : BackgroundService
 
         var jobService = services.GetRequiredService<IBlobWatcherJobService>();
 
-        // Use the endpoint URL as the sentinel blob name so we only create one job per endpoint per day.
-        var sentinelBlobName = ExternalApiJobBlobName + apiConfig.EndpointUrl;
+        // Use a hash of the endpoint URL as the sentinel blob name so the value
+        // stays within the BlobName VARCHAR(500) column limit.
+        var urlHash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(apiConfig.EndpointUrl)))[..16];
+        var sentinelBlobName = ExternalApiJobBlobName + urlHash;
         if (await jobService.ExistsAsync(sentinelBlobName, agentConfig.BlobContainerName ?? ExternalApiContainerName))
             return;
 
@@ -1171,7 +1177,7 @@ public class BlobWatcherBackgroundService : BackgroundService
             // Extract the LLM analysis section from the job log
             var logText  = job.LogDetails ?? string.Empty;
             var rawIdx   = logText.IndexOf("[Raw Log", StringComparison.Ordinal);
-            var analysis = rawIdx > 0 ? logText[..rawIdx].Replace("[Log Analysis]", "").Trim() : logText;
+            var analysis = rawIdx >= 0 ? logText[..rawIdx].Replace("[Log Analysis]", "").Trim() : logText;
 
             bool sent = false;
             try
