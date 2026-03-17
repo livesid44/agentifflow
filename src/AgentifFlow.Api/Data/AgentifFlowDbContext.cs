@@ -16,6 +16,7 @@ public class AgentifFlowDbContext : DbContext
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<AgentFileTarget> AgentFileTargets => Set<AgentFileTarget>();
     public DbSet<AgentSkill> AgentSkills => Set<AgentSkill>();
+    public DbSet<MonitoredJob> MonitoredJobs => Set<MonitoredJob>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -87,6 +88,18 @@ public class AgentifFlowDbContext : DbContext
                   .WithMany(a => a.Skills)
                   .HasForeignKey(e => e.AgentId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MonitoredJob>(entity =>
+        {
+            entity.ToTable("MonitoredJobs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.JobName).IsRequired().HasMaxLength(300);
+            entity.Property(e => e.ProjectName).HasMaxLength(200);
+            entity.Property(e => e.FailureReason).HasMaxLength(500);
+            entity.Property(e => e.Status)
+                  .HasConversion<string>()
+                  .HasMaxLength(50);
         });
     }
 }

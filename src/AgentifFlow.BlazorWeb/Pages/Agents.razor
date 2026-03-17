@@ -410,28 +410,136 @@ else
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
 <!-- MANAGE SKILLS DIALOG                                                         -->
 <!-- ═══════════════════════════════════════════════════════════════════════════ -->
-<MudDialog @bind-Visible="_skillsDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+<MudDialog @bind-Visible="_skillsDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
     <TitleContent>
         <MudIcon Icon="@Icons.Material.Outlined.Widgets" Class="mr-2" Style="vertical-align:middle;" />
         Skills — @(_skillsAgent?.Name)
     </TitleContent>
     <DialogContent>
         <MudText Typo="Typo.body2" Class="mb-4" Style="color:var(--mud-palette-text-secondary);">
-            Toggle skills for this agent. Each enabled skill adds a capability to the agent's pipeline.
+            Toggle skills for this agent. Skills with a gear icon have additional configuration options.
         </MudText>
         @foreach (var entry in _skillDraft)
         {
             var info = _catalogue.FirstOrDefault(c => c.Type == entry.SkillType);
             var skillColor = SkillColor(entry.SkillType);
-            <MudPaper Elevation="1" Class="pa-3 mb-2 rounded-lg d-flex align-center gap-3">
-                <MudIcon Icon="@SkillIcon(entry.SkillType)" Color="@skillColor" />
-                <div class="flex-grow-1">
-                    <MudText Typo="Typo.subtitle2" Style="font-weight:600;">@(info?.DisplayName ?? entry.SkillType)</MudText>
-                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
-                        @(info?.Description ?? "")
-                    </MudText>
+            <MudPaper Elevation="1" Class="pa-3 mb-3 rounded-lg">
+                <!-- Skill header row -->
+                <div class="d-flex align-center gap-3">
+                    <MudIcon Icon="@SkillIcon(entry.SkillType)" Color="@skillColor" />
+                    <div class="flex-grow-1">
+                        <MudText Typo="Typo.subtitle2" Style="font-weight:600;">@(info?.DisplayName ?? entry.SkillType)</MudText>
+                        <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
+                            @(info?.Description ?? "")
+                        </MudText>
+                    </div>
+                    <MudSwitch @bind-Value="entry.IsEnabled" Color="@skillColor" />
                 </div>
-                <MudSwitch @bind-Value="entry.IsEnabled" Color="@skillColor" />
+
+                <!-- ThirdPartyApiIntegration configuration panel -->
+                @if (entry.SkillType == "ThirdPartyApiIntegration" && entry.IsEnabled)
+                {
+                    var cfg = entry.ApiConfig ??= new ThirdPartyApiConfig();
+                    <MudDivider Class="my-3" />
+                    <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="font-weight:600; color:var(--mud-palette-text-secondary);">
+                        <MudIcon Icon="@Icons.Material.Outlined.Settings" Size="Size.Small" Class="mr-1" />API Configuration
+                    </MudText>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="cfg.EndpointUrl" Label="Endpoint URL"
+                                          Placeholder="https://your-host/api/jobmonitor/status"
+                                          Variant="Variant.Outlined" FullWidth="true" Dense="true"
+                                          HelperText="URL to poll each cycle. Use the built-in /api/jobmonitor/status for local testing." />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudSelect @bind-Value="cfg.RequestMethod" Label="Method"
+                                       Variant="Variant.Outlined" Dense="true" FullWidth="true">
+                                <MudSelectItem Value="@("GET")">GET</MudSelectItem>
+                                <MudSelectItem Value="@("POST")">POST</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudSelect @bind-Value="cfg.AuthType" Label="Auth Type"
+                                       Variant="Variant.Outlined" Dense="true" FullWidth="true">
+                                <MudSelectItem Value="@("None")">None</MudSelectItem>
+                                <MudSelectItem Value="@("Bearer")">Bearer Token</MudSelectItem>
+                                <MudSelectItem Value="@("ApiKey")">API Key Header</MudSelectItem>
+                                <MudSelectItem Value="@("Basic")">Basic (Base64)</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        @if (cfg.AuthType != "None")
+                        {
+                            @if (cfg.AuthType == "ApiKey")
+                            {
+                                <MudItem xs="4">
+                                    <MudTextField @bind-Value="cfg.AuthHeaderName" Label="Header Name"
+                                                  Placeholder="X-API-Key" Variant="Variant.Outlined" Dense="true" FullWidth="true" />
+                                </MudItem>
+                                <MudItem xs="8">
+                                    <MudTextField @bind-Value="cfg.AuthToken" Label="API Key Value"
+                                                  InputType="InputType.Password" Variant="Variant.Outlined" Dense="true" FullWidth="true" />
+                                </MudItem>
+                            }
+                            else
+                            {
+                                <MudItem xs="12">
+                                    <MudTextField @bind-Value="cfg.AuthToken" Label="Token / Credentials"
+                                                  InputType="InputType.Password" Variant="Variant.Outlined" Dense="true" FullWidth="true" />
+                                </MudItem>
+                            }
+                        }
+                        @if (cfg.RequestMethod == "POST")
+                        {
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="cfg.RequestPayloadTemplate" Label="Request Payload (JSON)"
+                                              Lines="3" Variant="Variant.Outlined" Dense="true" FullWidth="true"
+                                              Placeholder="{}" />
+                            </MudItem>
+                        }
+                        <MudItem xs="6">
+                            <MudTextField @bind-Value="cfg.SuccessIndicator" Label="Success Indicator (optional)"
+                                          Placeholder="e.g. hasFailed&quot;:false" Variant="Variant.Outlined" Dense="true" FullWidth="true"
+                                          HelperText="Substring that must appear in the response to count as success." />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudTextField @bind-Value="cfg.FailureIndicator" Label="Failure Indicator"
+                                          Placeholder="e.g. &quot;hasFailed&quot;:true" Variant="Variant.Outlined" Dense="true" FullWidth="true"
+                                          HelperText="Substring in the response that triggers the failure workflow." />
+                        </MudItem>
+                    </MudGrid>
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2" Icon="@Icons.Material.Outlined.Lightbulb">
+                        <strong>Local testing:</strong> Set Endpoint URL to <code>/api/jobmonitor/status</code> (relative) and Failure Indicator to <code>"hasFailed":true</code>. Use the <strong>Job Monitor</strong> page to simulate failures.
+                    </MudAlert>
+                }
+
+                <!-- LogAnalysis configuration panel -->
+                @if (entry.SkillType == "LogAnalysis" && entry.IsEnabled)
+                {
+                    var lcfg = entry.LogConfig ??= new LogAnalysisConfig();
+                    <MudDivider Class="my-3" />
+                    <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="font-weight:600; color:var(--mud-palette-text-secondary);">
+                        <MudIcon Icon="@Icons.Material.Outlined.Settings" Size="Size.Small" Class="mr-1" />Log Analysis Configuration
+                    </MudText>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="8">
+                            <MudTextField @bind-Value="lcfg.PocEmail" Label="POC Email (Data Owner)"
+                                          Placeholder="vendor@example.com" Variant="Variant.Outlined" Dense="true" FullWidth="true"
+                                          HelperText="Correction email is sent here after human approval." />
+                        </MudItem>
+                        <MudItem xs="4">
+                            <MudTextField @bind-Value="lcfg.PocName" Label="POC Name"
+                                          Placeholder="Data Team" Variant="Variant.Outlined" Dense="true" FullWidth="true" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="lcfg.AnalysisPrompt" Label="Custom Analysis Prompt (optional)"
+                                          Lines="3" Variant="Variant.Outlined" Dense="true" FullWidth="true"
+                                          Placeholder="Leave blank to use the default prompt that focuses on file naming mismatches." />
+                        </MudItem>
+                    </MudGrid>
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2" Icon="@Icons.Material.Outlined.AccountTree">
+                        <strong>Workflow:</strong> On failure → AI analyses logs → operator confirms → system asks to send correction email → email sent to POC.
+                    </MudAlert>
+                }
             </MudPaper>
         }
     </DialogContent>
@@ -486,38 +594,46 @@ else
 
     private static Color SkillColor(string skillType) => skillType switch
     {
-        "EmailMonitoring" => Color.Info,
-        "FileMonitoring"  => Color.Primary,
-        "DataValidation"  => Color.Warning,
-        "SqlManagement"   => Color.Secondary,
-        _                 => Color.Default,
+        "EmailMonitoring"          => Color.Info,
+        "FileMonitoring"           => Color.Primary,
+        "DataValidation"           => Color.Warning,
+        "SqlManagement"            => Color.Secondary,
+        "ThirdPartyApiIntegration" => Color.Tertiary,
+        "LogAnalysis"              => Color.Success,
+        _                          => Color.Default,
     };
 
     private static string SkillColorName(string skillType) => skillType switch
     {
-        "EmailMonitoring" => "info",
-        "FileMonitoring"  => "primary",
-        "DataValidation"  => "warning",
-        "SqlManagement"   => "secondary",
-        _                 => "default",
+        "EmailMonitoring"          => "info",
+        "FileMonitoring"           => "primary",
+        "DataValidation"           => "warning",
+        "SqlManagement"            => "secondary",
+        "ThirdPartyApiIntegration" => "tertiary",
+        "LogAnalysis"              => "success",
+        _                          => "default",
     };
 
     private static string SkillIcon(string skillType) => skillType switch
     {
-        "EmailMonitoring" => Icons.Material.Outlined.MarkEmailUnread,
-        "FileMonitoring"  => Icons.Material.Outlined.FolderOpen,
-        "DataValidation"  => Icons.Material.Outlined.FactCheck,
-        "SqlManagement"   => Icons.Material.Outlined.TableChart,
-        _                 => Icons.Material.Outlined.Widgets,
+        "EmailMonitoring"          => Icons.Material.Outlined.MarkEmailUnread,
+        "FileMonitoring"           => Icons.Material.Outlined.FolderOpen,
+        "DataValidation"           => Icons.Material.Outlined.FactCheck,
+        "SqlManagement"            => Icons.Material.Outlined.TableChart,
+        "ThirdPartyApiIntegration" => Icons.Material.Outlined.IntegrationInstructions,
+        "LogAnalysis"              => Icons.Material.Outlined.Analytics,
+        _                          => Icons.Material.Outlined.Widgets,
     };
 
     private static string SkillDisplayName(string skillType) => skillType switch
     {
-        "EmailMonitoring" => "Email Mon.",
-        "FileMonitoring"  => "File Mon.",
-        "DataValidation"  => "Data Valid.",
-        "SqlManagement"   => "SQL Mgmt",
-        _                 => skillType,
+        "EmailMonitoring"          => "Email Mon.",
+        "FileMonitoring"           => "File Mon.",
+        "DataValidation"           => "Data Valid.",
+        "SqlManagement"            => "SQL Mgmt",
+        "ThirdPartyApiIntegration" => "3rd Party API",
+        "LogAnalysis"              => "Log Analysis",
+        _                          => skillType,
     };
 
     private int AgentsUsingSkill(string skillType)
@@ -533,12 +649,28 @@ else
         _skillDraft = _catalogue.Select(c =>
         {
             var existing = agent.Skills.FirstOrDefault(s => s.SkillType == c.Type);
-            return new SkillDraftEntry
+            var entry = new SkillDraftEntry
             {
                 SkillType  = c.Type,
                 IsEnabled  = existing?.IsEnabled ?? false,
                 ConfigJson = existing?.ConfigJson,
             };
+
+            // Parse config into typed objects for form binding
+            if (!string.IsNullOrWhiteSpace(entry.ConfigJson))
+            {
+                try
+                {
+                    var opts = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    if (c.Type == "ThirdPartyApiIntegration")
+                        entry.ApiConfig = System.Text.Json.JsonSerializer.Deserialize<ThirdPartyApiConfig>(entry.ConfigJson, opts);
+                    else if (c.Type == "LogAnalysis")
+                        entry.LogConfig = System.Text.Json.JsonSerializer.Deserialize<LogAnalysisConfig>(entry.ConfigJson, opts);
+                }
+                catch { /* leave null, form will start from defaults */ }
+            }
+
+            return entry;
         }).ToList();
 
         _skillsDialogOpen = true;
@@ -550,6 +682,21 @@ else
         _savingSkills = true;
         try
         {
+            var opts = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+            };
+
+            // Serialize typed config objects back to ConfigJson before sending
+            foreach (var entry in _skillDraft)
+            {
+                if (entry.SkillType == "ThirdPartyApiIntegration" && entry.ApiConfig is not null)
+                    entry.ConfigJson = System.Text.Json.JsonSerializer.Serialize(entry.ApiConfig, opts);
+                else if (entry.SkillType == "LogAnalysis" && entry.LogConfig is not null)
+                    entry.ConfigJson = System.Text.Json.JsonSerializer.Serialize(entry.LogConfig, opts);
+            }
+
             var request = new SetSkillsRequest
             {
                 Skills = _skillDraft.Select(e => new AgentSkillEntry
@@ -712,5 +859,9 @@ else
         public string  SkillType  { get; set; } = string.Empty;
         public bool    IsEnabled  { get; set; }
         public string? ConfigJson { get; set; }
+
+        // Parsed config objects for the form (lazily initialised)
+        public ThirdPartyApiConfig? ApiConfig { get; set; }
+        public LogAnalysisConfig?   LogConfig { get; set; }
     }
 }

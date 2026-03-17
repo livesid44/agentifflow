@@ -14,7 +14,19 @@ public enum BlobWatcherJobStatus
     Retrying,
     Failed,
     /// <summary>Reply received from the recipient of a notification email.</summary>
-    ReplyReceived
+    ReplyReceived,
+
+    /// <summary>
+    /// Log analysis complete; notification sent asking the operator to confirm
+    /// the AI-generated root-cause finding before proceeding.
+    /// </summary>
+    AwaitingLogConfirmation,
+
+    /// <summary>
+    /// Operator confirmed the analysis; notification sent asking for approval
+    /// to dispatch a file-correction email to the data-owner POC.
+    /// </summary>
+    AwaitingPocApproval,
 }
 
 /// <summary>Tracks a single CSV file detected in blob storage through its full processing lifecycle.</summary>

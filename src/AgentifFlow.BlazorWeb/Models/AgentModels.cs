@@ -8,6 +8,37 @@ public enum SkillType
     FileMonitoring,
     DataValidation,
     SqlManagement,
+    ThirdPartyApiIntegration,
+    LogAnalysis,
+}
+
+// ── Skill config models (mirror AgentSkillConfig.cs in the API) ──────────────
+
+/// <summary>
+/// Configuration for the <see cref="SkillType.ThirdPartyApiIntegration"/> skill.
+/// Serialised to/from <see cref="AgentSkillDto.ConfigJson"/>.
+/// </summary>
+public class ThirdPartyApiConfig
+{
+    public string? EndpointUrl              { get; set; }
+    public string  RequestMethod            { get; set; } = "GET";
+    public string  AuthType                 { get; set; } = "None";
+    public string? AuthToken                { get; set; }
+    public string? AuthHeaderName           { get; set; }
+    public string? RequestPayloadTemplate   { get; set; }
+    public string? SuccessIndicator         { get; set; }
+    public string? FailureIndicator         { get; set; }
+}
+
+/// <summary>
+/// Configuration for the <see cref="SkillType.LogAnalysis"/> skill.
+/// Serialised to/from <see cref="AgentSkillDto.ConfigJson"/>.
+/// </summary>
+public class LogAnalysisConfig
+{
+    public string? PocEmail        { get; set; }
+    public string? PocName         { get; set; }
+    public string? AnalysisPrompt  { get; set; }
 }
 
 public class SkillCatalogueDto

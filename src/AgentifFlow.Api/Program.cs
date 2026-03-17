@@ -93,6 +93,7 @@ builder.Services.AddDbContext<AgentifFlowDbContext>(options =>
 // (configured via the Integration Settings page in the UI).
 builder.Services.AddScoped<IGraphMailService, GraphMailService>();
 builder.Services.AddScoped<ILlmService, LlmService>();
+builder.Services.AddHttpClient(); // used by ThirdPartyApiIntegration skill
 builder.Services.AddScoped<IAgentTaskService, AgentTaskService>();
 builder.Services.AddScoped<IAppConfigurationService, AppConfigurationService>();
 builder.Services.AddScoped<IBlobWatcherJobService, BlobWatcherJobService>();
@@ -296,6 +297,20 @@ using (var scope = app.Services.CreateScope())
                     ""ConfigJson"" TEXT    NULL,
                     CONSTRAINT ""FK_AgentSkills_Agents"" FOREIGN KEY (""AgentId"")
                         REFERENCES ""Agents"" (""Id"") ON DELETE CASCADE
+                );");
+
+            // Job monitor: MonitoredJobs table
+            await EnsureSqliteTableAsync(db, startupLogger, "MonitoredJobs", @"
+                CREATE TABLE IF NOT EXISTS ""MonitoredJobs"" (
+                    ""Id""            INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    ""JobName""       TEXT    NOT NULL DEFAULT '',
+                    ""ProjectName""   TEXT    NULL,
+                    ""Status""        TEXT    NOT NULL DEFAULT 'Running',
+                    ""FailureReason"" TEXT    NULL,
+                    ""Logs""          TEXT    NULL,
+                    ""StartedAt""     TEXT    NOT NULL DEFAULT '',
+                    ""CompletedAt""   TEXT    NULL,
+                    ""UpdatedAt""     TEXT    NOT NULL DEFAULT ''
                 );");
         }
         // ── Seed built-in demo agents ─────────────────────────────────────────

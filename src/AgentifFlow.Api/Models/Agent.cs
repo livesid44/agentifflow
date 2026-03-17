@@ -5,7 +5,7 @@ namespace AgentifFlow.Api.Models;
 
 // ── Skill catalogue ────────────────────────────────────────────────────────
 
-/// <summary>The four discrete capabilities that can be assigned to any agent.</summary>
+/// <summary>The discrete capabilities that can be assigned to any agent.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum SkillType
 {
@@ -20,6 +20,12 @@ public enum SkillType
 
     /// <summary>Pushes validated rows into a SQL Server target table.</summary>
     SqlManagement,
+
+    /// <summary>Calls a configured external REST API endpoint to check status and fetch data.</summary>
+    ThirdPartyApiIntegration,
+
+    /// <summary>Analyzes job failure logs via LLM and runs a human-in-the-loop correction workflow.</summary>
+    LogAnalysis,
 }
 
 /// <summary>Metadata describing a skill (shown in the Control Tower skills catalogue).</summary>
@@ -27,10 +33,12 @@ public static class SkillCatalogue
 {
     public static readonly IReadOnlyList<SkillInfo> All = new[]
     {
-        new SkillInfo(SkillType.EmailMonitoring,  "Email Monitoring",  "Watches a Microsoft 365 mailbox for file-arrival notification emails and triggers the pipeline.",  "email",    "Microsoft.Outlook.com"),
-        new SkillInfo(SkillType.FileMonitoring,   "File Monitoring",   "Polls Azure Blob Storage for expected files. Sends alerts when required files are missing.",         "folder",   "Microsoft.Azure.Storage.Blobs"),
-        new SkillInfo(SkillType.DataValidation,   "Data Validation",   "Validates ingested CSV rows against configurable schema rules and flags bad data for review.",      "check_box","AgentifFlow.Validation"),
-        new SkillInfo(SkillType.SqlManagement,    "SQL Management",    "Pushes validated rows into a SQL Server target table, auto-creating the schema when needed.",       "storage",  "Microsoft.Data.SqlClient"),
+        new SkillInfo(SkillType.EmailMonitoring,         "Email Monitoring",       "Watches a Microsoft 365 mailbox for file-arrival notification emails and triggers the pipeline.",                                                           "email",                "Microsoft.Outlook.com"),
+        new SkillInfo(SkillType.FileMonitoring,          "File Monitoring",        "Polls Azure Blob Storage for expected files. Sends alerts when required files are missing.",                                                                "folder",               "Microsoft.Azure.Storage.Blobs"),
+        new SkillInfo(SkillType.DataValidation,          "Data Validation",        "Validates ingested CSV rows against configurable schema rules and flags bad data for review.",                                                              "check_box",            "AgentifFlow.Validation"),
+        new SkillInfo(SkillType.SqlManagement,           "SQL Management",         "Pushes validated rows into a SQL Server target table, auto-creating the schema when needed.",                                                               "storage",              "Microsoft.Data.SqlClient"),
+        new SkillInfo(SkillType.ThirdPartyApiIntegration,"3rd Party Integration",  "Calls a configured external REST API (e.g. Azkaban) to monitor job status and fetch failure logs. Configure endpoint, auth, and response indicators.",     "integration_instructions", "AgentifFlow.ExternalApi"),
+        new SkillInfo(SkillType.LogAnalysis,             "Log Analysis",           "Uses AI to analyze failure logs, identifies root causes (e.g. file naming mismatches), confirms with the operator, and sends a correction email to the POC.", "analytics",            "AgentifFlow.LogAnalysis"),
     };
 }
 

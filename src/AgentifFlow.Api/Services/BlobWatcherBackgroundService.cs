@@ -18,6 +18,10 @@ namespace AgentifFlow.Api.Services;
 /// </summary>
 public class BlobWatcherBackgroundService : BackgroundService
 {
+    /// <summary>Sentinel blob name for external-API monitor jobs (no real blob involved).</summary>
+    private const string ExternalApiJobBlobName = "[ext-api]";
+    private const string ExternalApiContainerName = "[ext]";
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BlobWatcherBackgroundService> _logger;
 
@@ -245,6 +249,10 @@ public class BlobWatcherBackgroundService : BackgroundService
             await ProcessBlobAsync(rj, rj.BlobName, rc, agentConfig,
                 jobService, csvValidation, llmService, mailService, ct);
         }
+
+        // ── ThirdParty API checks (runs after blob cycle) ─────────────────────
+        if (agentConfig.ThirdPartyApiActive)
+            await RunThirdPartyApiChecksAsync(agent, agentConfig, services, db, ct);
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -498,8 +506,10 @@ public class BlobWatcherBackgroundService : BackgroundService
         // Only proceed when there are jobs actively waiting for a reply
         var waitingJobs = await db.BlobWatcherJobs
             .Where(j => j.NotificationRef != null &&
-                        (j.Status == BlobWatcherJobStatus.AwaitingApproval ||
-                         j.Status == BlobWatcherJobStatus.ValidationFailed))
+                        (j.Status == BlobWatcherJobStatus.AwaitingApproval      ||
+                         j.Status == BlobWatcherJobStatus.ValidationFailed      ||
+                         j.Status == BlobWatcherJobStatus.AwaitingLogConfirmation ||
+                         j.Status == BlobWatcherJobStatus.AwaitingPocApproval))
             .ToListAsync(ct);
 
         if (waitingJobs.Count == 0) return;
@@ -547,6 +557,25 @@ public class BlobWatcherBackgroundService : BackgroundService
             }
 
             // ── Re-trigger processing based on job type ─────────────────────
+
+            // Log-analysis workflow: advance through the multi-step approval chain
+            if (job.Status == BlobWatcherJobStatus.AwaitingLogConfirmation ||
+                job.Status == BlobWatcherJobStatus.AwaitingPocApproval)
+            {
+                bool rejected = reply.BodyPreview?.Contains("reject", StringComparison.OrdinalIgnoreCase) == true;
+                if (rejected)
+                {
+                    await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Rejected,
+                        logEntry: $"Rejected by '{reply.From}': " +
+                                  $"{reply.BodyPreview?[..Math.Min(200, reply.BodyPreview?.Length ?? 0)]}");
+                }
+                else
+                {
+                    await HandleLogAnalysisReplyAsync(job, reply, db, jobService, mailService, ct);
+                }
+                continue;
+            }
+
             if (!string.IsNullOrWhiteSpace(config.BlobStorageConnectionString) &&
                 !string.IsNullOrWhiteSpace(config.BlobContainerName))
             {
@@ -828,6 +857,355 @@ public class BlobWatcherBackgroundService : BackgroundService
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // ThirdParty API integration + log-analysis workflow
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Calls the configured external API endpoint and, if a failure is detected,
+    /// creates a job and triggers the log-analysis notification workflow.
+    /// </summary>
+    private async Task RunThirdPartyApiChecksAsync(
+        Agent agent,
+        AgentRunConfig agentConfig,
+        IServiceProvider services,
+        AgentifFlowDbContext db,
+        CancellationToken ct)
+    {
+        var apiSkill = agent.Skills.FirstOrDefault(s =>
+            s.SkillType == Models.SkillType.ThirdPartyApiIntegration.ToString() && s.IsEnabled);
+
+        if (apiSkill?.ConfigJson is null) return;
+
+        ThirdPartyApiConfig? apiConfig;
+        try
+        {
+            apiConfig = System.Text.Json.JsonSerializer.Deserialize<ThirdPartyApiConfig>(
+                apiSkill.ConfigJson,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch { return; }
+
+        if (string.IsNullOrWhiteSpace(apiConfig?.EndpointUrl)) return;
+
+        var jobService = services.GetRequiredService<IBlobWatcherJobService>();
+
+        // Use the endpoint URL as the sentinel blob name so we only create one job per endpoint per day.
+        var sentinelBlobName = ExternalApiJobBlobName + apiConfig.EndpointUrl;
+        if (await jobService.ExistsAsync(sentinelBlobName, agentConfig.BlobContainerName ?? ExternalApiContainerName))
+            return;
+
+        string responseBody;
+        try
+        {
+            var http = services.GetRequiredService<IHttpClientFactory>().CreateClient();
+
+            switch (apiConfig.AuthType?.ToUpperInvariant())
+            {
+                case "BEARER" when !string.IsNullOrWhiteSpace(apiConfig.AuthToken):
+                    http.DefaultRequestHeaders.Authorization =
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiConfig.AuthToken);
+                    break;
+                case "APIKEY" when !string.IsNullOrWhiteSpace(apiConfig.AuthToken) &&
+                                   !string.IsNullOrWhiteSpace(apiConfig.AuthHeaderName):
+                    http.DefaultRequestHeaders.Add(apiConfig.AuthHeaderName, apiConfig.AuthToken);
+                    break;
+                case "BASIC" when !string.IsNullOrWhiteSpace(apiConfig.AuthToken):
+                    http.DefaultRequestHeaders.Authorization =
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", apiConfig.AuthToken);
+                    break;
+            }
+
+            if (apiConfig.RequestMethod?.Equals("POST", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                var payload = apiConfig.RequestPayloadTemplate ?? "{}";
+                var content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
+                var postResp = await http.PostAsync(apiConfig.EndpointUrl, content, ct);
+                responseBody = await postResp.Content.ReadAsStringAsync(ct);
+            }
+            else
+            {
+                responseBody = await http.GetStringAsync(apiConfig.EndpointUrl, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Agent '{Name}': ThirdPartyApi call to '{Url}' failed.", agent.Name, apiConfig.EndpointUrl);
+            return;
+        }
+
+        // Determine whether the response indicates a failure
+        bool isFailure = false;
+        if (!string.IsNullOrEmpty(apiConfig.FailureIndicator) &&
+            responseBody.Contains(apiConfig.FailureIndicator, StringComparison.OrdinalIgnoreCase))
+            isFailure = true;
+        else if (!string.IsNullOrEmpty(apiConfig.SuccessIndicator) &&
+                 !responseBody.Contains(apiConfig.SuccessIndicator, StringComparison.OrdinalIgnoreCase))
+            isFailure = true;
+
+        if (!isFailure)
+        {
+            _logger.LogDebug("Agent '{Name}': ThirdPartyApi check passed for '{Url}'.", agent.Name, apiConfig.EndpointUrl);
+            return;
+        }
+
+        _logger.LogWarning("Agent '{Name}': ThirdPartyApi failure detected at '{Url}'.", agent.Name, apiConfig.EndpointUrl);
+
+        var job = await jobService.CreateAsync(
+            sentinelBlobName,
+            agentConfig.BlobContainerName ?? ExternalApiContainerName,
+            agent.Id);
+
+        if (agentConfig.LogAnalysisActive)
+            await AnalyzeLogsAndNotifyAsync(job, responseBody, agent, agentConfig, services, ct);
+        else
+            await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
+                logEntry: "ThirdParty API failure detected. Log Analysis skill is not enabled.\n" +
+                          $"Response preview:\n{responseBody[..Math.Min(500, responseBody.Length)]}");
+    }
+
+    /// <summary>
+    /// Sends log content to the LLM for root-cause analysis, then emails the operator
+    /// asking them to confirm whether the analysis is correct (step 1 of the workflow).
+    /// </summary>
+    private async Task AnalyzeLogsAndNotifyAsync(
+        BlobWatcherJob job,
+        string logContent,
+        Agent agent,
+        AgentRunConfig agentConfig,
+        IServiceProvider services,
+        CancellationToken ct)
+    {
+        var jobService  = services.GetRequiredService<IBlobWatcherJobService>();
+        var llmService  = services.GetRequiredService<ILlmService>();
+        var mailService = services.GetRequiredService<IGraphMailService>();
+
+        // Resolve LogAnalysis skill config
+        var logSkill = agent.Skills.FirstOrDefault(s =>
+            s.SkillType == Models.SkillType.LogAnalysis.ToString() && s.IsEnabled);
+        LogAnalysisConfig? logConfig = null;
+        if (logSkill?.ConfigJson is not null)
+            try
+            {
+                logConfig = System.Text.Json.JsonSerializer.Deserialize<LogAnalysisConfig>(
+                    logSkill.ConfigJson,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch { /* use defaults */ }
+
+        // Analyse via LLM
+        string analysisResult;
+        try
+        {
+            var truncatedLog = logContent.Length > 4000
+                ? logContent[..4000] + "\n...[truncated]"
+                : logContent;
+
+            var prompt = string.IsNullOrWhiteSpace(logConfig?.AnalysisPrompt)
+                ? "Analyze the following job failure log and identify the root cause. " +
+                  "Focus on file naming mismatches, missing files, or configuration errors. " +
+                  "Provide a concise summary: (1) what failed, (2) why it failed, (3) what correction is needed."
+                : logConfig.AnalysisPrompt;
+
+            analysisResult = await llmService.SummarizeAsync($"{prompt}\n\nLog content:\n{truncatedLog}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Agent '{Name}': LLM log analysis failed.", agent.Name);
+            analysisResult = "Automated analysis unavailable. Please review the log manually.";
+        }
+
+        // Persist analysis in the job log
+        await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.ValidationFailed,
+            logEntry: $"[Log Analysis]\n{analysisResult}\n\n" +
+                      $"[Raw Log (first 2000 chars)]\n{logContent[..Math.Min(2000, logContent.Length)]}");
+
+        // Send step-1 confirmation email
+        if (string.IsNullOrWhiteSpace(agentConfig.NotificationEmail))
+        {
+            await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
+                logEntry: "Log analysis complete but no notification email is configured — cannot proceed without human confirmation.");
+            return;
+        }
+
+        var notifRef  = GenerateRef();
+        var emailBody =
+            $"Agent: {agentConfig.AgentName}\n\n" +
+            $"I have analysed the job failure logs and identified the following root cause:\n\n" +
+            $"────────────────────────────────────────\n" +
+            $"{analysisResult}\n" +
+            $"────────────────────────────────────────\n\n" +
+            $"Please confirm whether this analysis is correct.\n\n" +
+            $"→ Reply with 'Approve' to confirm and proceed to the next step " +
+            $"(sending a correction email to the data owner).\n" +
+            $"→ Reply with 'Reject' to dismiss this finding.\n\n" +
+            $"Reference: {notifRef}";
+
+        bool sent = await TrySendEmailAsync(
+            mailService, agentConfig.NotificationEmail,
+            $"[AgentifFlow] Log Analysis — {agentConfig.AgentName} [Ref: {notifRef}]",
+            emailBody,
+            $"log-analysis-confirm [{notifRef}]");
+
+        if (sent)
+        {
+            await jobService.SetNotificationRefAsync(job.Id, notifRef);
+            await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.AwaitingLogConfirmation,
+                logEntry: $"Analysis email sent to {agentConfig.NotificationEmail} [Ref: {notifRef}]. " +
+                          $"Awaiting human confirmation.");
+        }
+        else
+        {
+            await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
+                logEntry: "Log analysis complete but the confirmation email could not be delivered.");
+        }
+    }
+
+    /// <summary>
+    /// Handles email replies for the log-analysis multi-step approval workflow:
+    /// <list type="bullet">
+    ///   <item><see cref="BlobWatcherJobStatus.AwaitingLogConfirmation"/> → sends a second email
+    ///         asking whether to dispatch a correction email to the POC.</item>
+    ///   <item><see cref="BlobWatcherJobStatus.AwaitingPocApproval"/> → sends the correction
+    ///         email to the configured POC and marks the job Completed.</item>
+    /// </list>
+    /// </summary>
+    private async Task HandleLogAnalysisReplyAsync(
+        BlobWatcherJob job,
+        EmailMessage reply,
+        AgentifFlowDbContext db,
+        IBlobWatcherJobService jobService,
+        IGraphMailService mailService,
+        CancellationToken ct)
+    {
+        // Reload the agent with skill data
+        Agent? agent = null;
+        if (job.AgentId.HasValue)
+            agent = await db.Agents
+                .Include(a => a.Skills)
+                .FirstOrDefaultAsync(a => a.Id == job.AgentId.Value, ct);
+
+        LogAnalysisConfig? logConfig = null;
+        if (agent is not null)
+        {
+            var logSkill = agent.Skills.FirstOrDefault(s =>
+                s.SkillType == Models.SkillType.LogAnalysis.ToString() && s.IsEnabled);
+            if (logSkill?.ConfigJson is not null)
+                try
+                {
+                    logConfig = System.Text.Json.JsonSerializer.Deserialize<LogAnalysisConfig>(
+                        logSkill.ConfigJson,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+                catch { /* use defaults */ }
+        }
+
+        // ── Step 1 confirmed → ask about sending POC email ─────────────────────
+        if (job.Status == BlobWatcherJobStatus.AwaitingLogConfirmation)
+        {
+            var pocEmail = logConfig?.PocEmail;
+            var pocName  = logConfig?.PocName ?? "the data owner";
+            var pocRef   = GenerateRef();
+
+            var emailBody =
+                $"Thank you for confirming the analysis.\n\n" +
+                $"Shall I send a file-correction email to {pocName}" +
+                (string.IsNullOrWhiteSpace(pocEmail) ? "" : $" ({pocEmail})") + "?\n\n" +
+                $"→ Reply with 'Approve' to send the correction email.\n" +
+                $"→ Reply with 'Reject' to close this case without sending.\n\n" +
+                $"Reference: {pocRef}";
+
+            var notifEmail = agent?.NotificationEmail;
+            if (string.IsNullOrWhiteSpace(notifEmail))
+            {
+                await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
+                    logEntry: "Analysis confirmed but no notification email configured — cannot request POC email approval.");
+                return;
+            }
+
+            bool sent = false;
+            try
+            {
+                await mailService.SendEmailAsync(new SendEmailRequest
+                {
+                    To = notifEmail,
+                    Subject = $"[AgentifFlow] Send Correction Email? [Ref: {pocRef}]",
+                    Body = emailBody, IsHtml = false
+                });
+                sent = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "HandleLogAnalysisReply: could not send POC approval request for job {Id}.", job.Id);
+            }
+
+            if (sent)
+            {
+                await jobService.SetNotificationRefAsync(job.Id, pocRef);
+                await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.AwaitingPocApproval,
+                    logEntry: $"Analysis confirmed by '{reply.From}'. " +
+                              $"Awaiting approval to send correction email to POC [Ref: {pocRef}].");
+            }
+            else
+            {
+                await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
+                    logEntry: "Analysis confirmed but the POC-approval email could not be delivered.");
+            }
+
+            return;
+        }
+
+        // ── Step 2 approved → send correction email to POC ─────────────────────
+        if (job.Status == BlobWatcherJobStatus.AwaitingPocApproval)
+        {
+            var pocEmail = logConfig?.PocEmail;
+            if (string.IsNullOrWhiteSpace(pocEmail))
+            {
+                await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Failed,
+                    logEntry: "POC email is not configured in the Log Analysis skill — cannot send correction email.");
+                return;
+            }
+
+            var pocName   = logConfig?.PocName ?? "Team";
+            var agentName = agent?.Name ?? "AgentifFlow";
+
+            // Extract the LLM analysis section from the job log
+            var logText  = job.LogDetails ?? string.Empty;
+            var rawIdx   = logText.IndexOf("[Raw Log", StringComparison.Ordinal);
+            var analysis = rawIdx > 0 ? logText[..rawIdx].Replace("[Log Analysis]", "").Trim() : logText;
+
+            bool sent = false;
+            try
+            {
+                await mailService.SendEmailAsync(new SendEmailRequest
+                {
+                    To      = pocEmail,
+                    Subject = $"[{agentName}] File Correction Required",
+                    Body    =
+                        $"Dear {pocName},\n\n" +
+                        $"Our automated monitoring system has detected an issue with the file delivery " +
+                        $"for agent '{agentName}'.\n\n" +
+                        $"Root-cause analysis:\n{analysis}\n\n" +
+                        $"Please provide the corrected file at your earliest convenience.\n\n" +
+                        $"Thank you,\n{agentName}",
+                    IsHtml  = false
+                });
+                sent = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "HandleLogAnalysisReply: could not send correction email to POC for job {Id}.", job.Id);
+            }
+
+            await jobService.UpdateStatusAsync(
+                job.Id,
+                sent ? BlobWatcherJobStatus.Completed : BlobWatcherJobStatus.Failed,
+                logEntry: sent
+                    ? $"File-correction email sent to POC ({pocEmail})."
+                    : $"Failed to send correction email to POC ({pocEmail}).");
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // SQL bulk-insert
     // ──────────────────────────────────────────────────────────────────────────
 
@@ -1030,7 +1408,9 @@ public class BlobWatcherBackgroundService : BackgroundService
         bool? SkillEmailMonitoring,
         bool? SkillFileMonitoring,
         bool? SkillDataValidation,
-        bool? SkillSqlManagement)
+        bool? SkillSqlManagement,
+        bool? SkillThirdPartyApi,
+        bool? SkillLogAnalysis)
     {
         /// <summary>True if File Monitoring is active (skill-aware, falls back to BlobEnabled / presence of targets).</summary>
         public bool FileMonitoringActive  => SkillFileMonitoring  ?? true;
@@ -1040,6 +1420,10 @@ public class BlobWatcherBackgroundService : BackgroundService
         public bool SqlManagementActive   => SkillSqlManagement   ?? SqlPushEnabled;
         /// <summary>True if Email Monitoring is active (skill-aware, falls back to always-on when mailbox configured).</summary>
         public bool EmailMonitoringActive => SkillEmailMonitoring ?? true;
+        /// <summary>True if ThirdParty API Integration is active.</summary>
+        public bool ThirdPartyApiActive   => SkillThirdPartyApi   ?? false;
+        /// <summary>True if Log Analysis is active.</summary>
+        public bool LogAnalysisActive     => SkillLogAnalysis      ?? false;
 
         public static AgentRunConfig FromAppConfig(AppConfiguration c) => new(
             AgentId:                  null,
@@ -1061,19 +1445,24 @@ public class BlobWatcherBackgroundService : BackgroundService
             SkillEmailMonitoring:     null,
             SkillFileMonitoring:      null,
             SkillDataValidation:      null,
-            SkillSqlManagement:       null
+            SkillSqlManagement:       null,
+            SkillThirdPartyApi:       null,
+            SkillLogAnalysis:         null
         );
 
         public static AgentRunConfig FromAgent(Agent a, AppConfiguration g)
         {
             // When the agent has explicit skill assignments, resolve them.
             bool? emailSkill = null, fileSkill = null, validSkill = null, sqlSkill = null;
+            bool? apiSkill   = null, logSkill  = null;
             if (a.Skills.Any())
             {
-                emailSkill = a.Skills.Any(s => s.SkillType == Models.SkillType.EmailMonitoring.ToString() && s.IsEnabled);
-                fileSkill  = a.Skills.Any(s => s.SkillType == Models.SkillType.FileMonitoring.ToString()  && s.IsEnabled);
-                validSkill = a.Skills.Any(s => s.SkillType == Models.SkillType.DataValidation.ToString()  && s.IsEnabled);
-                sqlSkill   = a.Skills.Any(s => s.SkillType == Models.SkillType.SqlManagement.ToString()   && s.IsEnabled);
+                emailSkill = a.Skills.Any(s => s.SkillType == Models.SkillType.EmailMonitoring.ToString()          && s.IsEnabled);
+                fileSkill  = a.Skills.Any(s => s.SkillType == Models.SkillType.FileMonitoring.ToString()           && s.IsEnabled);
+                validSkill = a.Skills.Any(s => s.SkillType == Models.SkillType.DataValidation.ToString()           && s.IsEnabled);
+                sqlSkill   = a.Skills.Any(s => s.SkillType == Models.SkillType.SqlManagement.ToString()            && s.IsEnabled);
+                apiSkill   = a.Skills.Any(s => s.SkillType == Models.SkillType.ThirdPartyApiIntegration.ToString() && s.IsEnabled);
+                logSkill   = a.Skills.Any(s => s.SkillType == Models.SkillType.LogAnalysis.ToString()              && s.IsEnabled);
             }
 
             return new(
@@ -1096,7 +1485,9 @@ public class BlobWatcherBackgroundService : BackgroundService
                 SkillEmailMonitoring:     emailSkill,
                 SkillFileMonitoring:      fileSkill,
                 SkillDataValidation:      validSkill,
-                SkillSqlManagement:       sqlSkill
+                SkillSqlManagement:       sqlSkill,
+                SkillThirdPartyApi:       apiSkill,
+                SkillLogAnalysis:         logSkill
             );
         }
     }
