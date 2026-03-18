@@ -25,6 +25,9 @@ public class BlobWatcherBackgroundService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BlobWatcherBackgroundService> _logger;
 
+    /// <summary>Tracks the last time each agent (by Id) was polled for per-agent interval enforcement.</summary>
+    private readonly Dictionary<int, DateTime> _agentLastPolled = new();
+
     public BlobWatcherBackgroundService(
         IServiceScopeFactory scopeFactory,
         ILogger<BlobWatcherBackgroundService> logger)
@@ -70,7 +73,23 @@ public class BlobWatcherBackgroundService : BackgroundService
                 if (agents.Count > 0)
                 {
                     foreach (var agent in agents)
+                    {
+                        // Honour per-agent polling interval: skip the agent if its
+                        // configured schedule has not elapsed since the last run.
+                        var intervalMinutes = agent.PollingIntervalMinutes > 0 ? agent.PollingIntervalMinutes : 5;
+                        if (_agentLastPolled.TryGetValue(agent.Id, out var lastPolled) &&
+                            (cycleStart - lastPolled).TotalMinutes < intervalMinutes)
+                        {
+                            _logger.LogDebug(
+                                "Agent '{Name}' (Id={Id}): skipping — next poll in {Remaining:F1} min.",
+                                agent.Name, agent.Id,
+                                intervalMinutes - (cycleStart - lastPolled).TotalMinutes);
+                            continue;
+                        }
+
+                        _agentLastPolled[agent.Id] = cycleStart;
                         await RunAgentAsync(agent, config, scope.ServiceProvider, db, stoppingToken);
+                    }
                 }
                 else if (config.AgentFlowEnabled &&
                          !string.IsNullOrWhiteSpace(config.BlobStorageConnectionString) &&
@@ -180,6 +199,9 @@ public class BlobWatcherBackgroundService : BackgroundService
                     effectiveConfig = agentConfig with { SkillSqlManagement = false };
             }
 
+            // Collect all missing required files so we can send ONE consolidated email.
+            var missingRequiredFiles = new List<string>();
+
             foreach (var target in agent.FileTargets)
             {
                 var expectedName = ResolveFilePattern(target, pollDate);
@@ -195,8 +217,8 @@ public class BlobWatcherBackgroundService : BackgroundService
 
                 if (!exists)
                 {
-                    if (target.IsRequired && agentConfig.NotifyOnFileNotFound)
-                        await SendMissingFileNotificationAsync(expectedName, agentConfig, agent.Id, services, ct);
+                    if (target.IsRequired)
+                        missingRequiredFiles.Add(expectedName);
                     else
                         _logger.LogDebug("Agent '{Name}': '{Blob}' not found (optional target).", agent.Name, expectedName);
                     continue;
@@ -212,6 +234,10 @@ public class BlobWatcherBackgroundService : BackgroundService
                 await ProcessBlobAsync(job, expectedName, containerClient, effectiveConfig,
                     jobService, csvValidation, llmService, mailService, ct);
             }
+
+            // Send a single consolidated notification for all missing required files.
+            if (missingRequiredFiles.Count > 0 && agentConfig.NotifyOnFileNotFound)
+                await SendMissingFilesNotificationAsync(missingRequiredFiles, agentConfig, agent.Id, services, ct);
         }
         else
         {
@@ -229,7 +255,7 @@ public class BlobWatcherBackgroundService : BackgroundService
             }
 
             if (csvFilesDetected == 0 && agentConfig.NotifyOnFileNotFound)
-                await SendMissingFileNotificationAsync(null, agentConfig, agent.Id, services, ct);
+                await SendMissingFilesNotificationAsync(null, agentConfig, agent.Id, services, ct);
         }
 
         // ── Auto-retry timer ──────────────────────────────────────────────────
@@ -400,27 +426,71 @@ public class BlobWatcherBackgroundService : BackgroundService
         IServiceProvider services,
         CancellationToken ct)
     {
+        // Delegate to the consolidated version with a single-item or null list.
+        var files = expectedFileName is null
+            ? null
+            : new List<string> { expectedFileName };
+        await SendMissingFilesNotificationAsync(files, agentConfig, agentId, services, ct);
+    }
+
+    /// <summary>
+    /// Sends a single consolidated notification email listing all missing required files.
+    /// When <paramref name="missingFiles"/> is null or empty, a generic "no files found" message is sent.
+    /// </summary>
+    private async Task SendMissingFilesNotificationAsync(
+        IReadOnlyList<string>? missingFiles,
+        AgentRunConfig agentConfig,
+        int agentId,
+        IServiceProvider services,
+        CancellationToken ct)
+    {
         if (string.IsNullOrWhiteSpace(agentConfig.NotificationEmail)) return;
 
         var jobService  = services.GetRequiredService<IBlobWatcherJobService>();
         var mailService = services.GetRequiredService<IGraphMailService>();
 
-        var blobDesc = expectedFileName ?? "[any .csv]";
-        var job      = await jobService.CreateAsync(NoFileBlobName, agentConfig.BlobContainerName, agentId);
-        var nref     = GenerateRef();
+        var job  = await jobService.CreateAsync(NoFileBlobName, agentConfig.BlobContainerName, agentId);
+        var nref = GenerateRef();
 
-        _logger.LogInformation(
-            "Agent (Id={AgentId}): required file '{File}' not found — sending notification [{Ref}].",
-            agentId, blobDesc, nref);
+        string subject, body;
 
-        var subject = $"[AgentifFlow] Required File Not Found: {blobDesc} [Ref: {nref}]";
-        var body    =
-            $"Agent \"{agentConfig.AgentName}\" polled blob container \"{agentConfig.BlobContainerName}\" " +
-            $"but did not find the required file \"{blobDesc}\".\n\n" +
-            "Please upload the file, or verify the container name and storage credentials.\n\n" +
-            $"The agent will automatically retry in {agentConfig.AutoRetryIntervalMinutes} minutes.\n\n" +
-            "Reply to this email once the file is available.\n\n" +
-            $"Reference: {nref}";
+        if (missingFiles is { Count: > 0 })
+        {
+            // Build the file list for the email body.
+            var fileList = string.Join("\n", missingFiles.Select(f => $"  • {f}"));
+            var summary  = missingFiles.Count == 1
+                ? $"Required File Not Found: {missingFiles[0]}"
+                : $"{missingFiles.Count} Required Files Not Found";
+
+            _logger.LogInformation(
+                "Agent (Id={AgentId}): {Count} required file(s) missing — sending consolidated notification [{Ref}].",
+                agentId, missingFiles.Count, nref);
+
+            subject = $"[AgentifFlow] {summary} [Ref: {nref}]";
+            body    =
+                $"Agent \"{agentConfig.AgentName}\" polled blob container \"{agentConfig.BlobContainerName}\" " +
+                $"but could not find the following required file(s):\n\n" +
+                $"{fileList}\n\n" +
+                "Please upload the missing file(s), or verify the container name and storage credentials.\n\n" +
+                $"The agent will automatically retry in {agentConfig.AutoRetryIntervalMinutes} minutes.\n\n" +
+                "Reply to this email once all files are available.\n\n" +
+                $"Reference: {nref}";
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Agent (Id={AgentId}): no CSV files found — sending notification [{Ref}].",
+                agentId, nref);
+
+            subject = $"[AgentifFlow] No CSV Files Found in '{agentConfig.BlobContainerName}' [Ref: {nref}]";
+            body    =
+                $"Agent \"{agentConfig.AgentName}\" polled blob container \"{agentConfig.BlobContainerName}\" " +
+                $"but did not find any CSV files to process.\n\n" +
+                "Please upload a CSV file to the container, or verify the container name and storage credentials.\n\n" +
+                $"The agent will automatically retry in {agentConfig.AutoRetryIntervalMinutes} minutes.\n\n" +
+                "Reply to this email once the file is available.\n\n" +
+                $"Reference: {nref}";
+        }
 
         bool sent = await TrySendEmailAsync(mailService, agentConfig.NotificationEmail, subject, body, $"missing-file [{nref}]");
         await jobService.SetNotificationRefAsync(job.Id, nref);
@@ -970,6 +1040,28 @@ public class BlobWatcherBackgroundService : BackgroundService
         if (!isFailure)
         {
             _logger.LogDebug("Agent '{Name}': ThirdPartyApi check passed for '{Url}'.", agent.Name, apiConfig.EndpointUrl);
+
+            // ── No new failure detected — but check for a previous Failed job whose
+            //    logs have not yet been analyzed.  When found, re-run the LogAnalysis
+            //    workflow so that the stored failure logs are not silently dropped even
+            //    if the external API has since recovered.
+            if (agentConfig.LogAnalysisActive)
+            {
+                var previousFailedJob = await db.BlobWatcherJobs
+                    .Where(j => j.AgentId == agent.Id &&
+                                j.Status  == BlobWatcherJobStatus.Failed &&
+                                j.LogDetails != null && j.LogDetails.Length > 0)
+                    .OrderByDescending(j => j.DetectedAt)
+                    .FirstOrDefaultAsync(ct);
+
+                if (previousFailedJob is not null)
+                {
+                    _logger.LogInformation(
+                        "Agent '{Name}': no new failure but previous job {Id} has unanalyzed logs — re-triggering LogAnalysis.",
+                        agent.Name, previousFailedJob.Id);
+                    await AnalyzeLogsAndNotifyAsync(previousFailedJob, previousFailedJob.LogDetails!, agent, agentConfig, services, ct);
+                }
+            }
             return;
         }
 

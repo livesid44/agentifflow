@@ -122,13 +122,15 @@ public class BlobWatcherJobService : IBlobWatcherJobService
         // whether the previous run was successful.
         return await _db.BlobWatcherJobs.AnyAsync(j =>
             j.BlobName == blobName && j.ContainerName == containerName &&
-            (j.Status == BlobWatcherJobStatus.Detected         ||
-             j.Status == BlobWatcherJobStatus.Validating        ||
-             j.Status == BlobWatcherJobStatus.ValidationFailed  ||
-             j.Status == BlobWatcherJobStatus.AwaitingApproval  ||
-             j.Status == BlobWatcherJobStatus.Inserting         ||
-             j.Status == BlobWatcherJobStatus.Retrying          ||
-             j.Status == BlobWatcherJobStatus.ReplyReceived));
+            (j.Status == BlobWatcherJobStatus.Detected              ||
+             j.Status == BlobWatcherJobStatus.Validating             ||
+             j.Status == BlobWatcherJobStatus.ValidationFailed       ||
+             j.Status == BlobWatcherJobStatus.AwaitingApproval       ||
+             j.Status == BlobWatcherJobStatus.Inserting              ||
+             j.Status == BlobWatcherJobStatus.Retrying               ||
+             j.Status == BlobWatcherJobStatus.ReplyReceived          ||
+             j.Status == BlobWatcherJobStatus.AwaitingLogConfirmation ||
+             j.Status == BlobWatcherJobStatus.AwaitingPocApproval));
     }
 
     public async Task<BlobWatcherJob?> SetNotificationRefAsync(int id, string notificationRef)

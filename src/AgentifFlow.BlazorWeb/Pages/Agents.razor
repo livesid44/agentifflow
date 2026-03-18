@@ -378,6 +378,11 @@ else
                             <MudNumericField @bind-Value="_form.AutoRetryIntervalMinutes" Label="Retry Interval (min)"
                                              Min="0" Max="1440" Variant="Variant.Outlined" />
                         </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudNumericField @bind-Value="_form.PollingIntervalMinutes" Label="Schedule Frequency (min)"
+                                             Min="1" Max="1440" Variant="Variant.Outlined"
+                                             HelperText="How often the agent polls for new files/events (default: 5 min)" />
+                        </MudItem>
                         <MudItem xs="12">
                             <MudTextField @bind-Value="_form.BlobArchiveFilePattern" Label="Archive File Pattern"
                                           Placeholder="e.g. archive/daily_report" Variant="Variant.Outlined" FullWidth="true"
@@ -780,6 +785,7 @@ else
             NotifyOnDataIssue        = agent.NotifyOnDataIssue,
             MaxRetryCount            = agent.MaxRetryCount,
             AutoRetryIntervalMinutes = agent.AutoRetryIntervalMinutes,
+            PollingIntervalMinutes   = agent.PollingIntervalMinutes,
             SqlPushEnabled           = agent.SqlPushEnabled,
             SqlTargetTable           = agent.SqlTargetTable,
             SqlColumnMappingJson     = agent.SqlColumnMappingJson,
@@ -826,6 +832,7 @@ else
                     NotifyOnDataIssue        = _form.NotifyOnDataIssue,
                     MaxRetryCount            = _form.MaxRetryCount,
                     AutoRetryIntervalMinutes = _form.AutoRetryIntervalMinutes,
+                    PollingIntervalMinutes   = _form.PollingIntervalMinutes,
                     SqlPushEnabled           = _form.SqlPushEnabled,
                     SqlTargetTable           = _form.SqlTargetTable ?? "",
                     BlobArchiveFilePattern   = _form.BlobArchiveFilePattern ?? "",

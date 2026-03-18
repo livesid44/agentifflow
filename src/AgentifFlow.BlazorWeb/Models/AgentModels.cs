@@ -86,6 +86,7 @@ public class AgentDto
     public bool NotifyOnDataIssue { get; set; }
     public int MaxRetryCount { get; set; }
     public int AutoRetryIntervalMinutes { get; set; }
+    public int PollingIntervalMinutes { get; set; }
     public bool SqlPushEnabled { get; set; }
     public string? SqlTargetTable { get; set; }
     public string? SqlColumnMappingJson { get; set; }
@@ -123,6 +124,7 @@ public class CreateAgentRequest
     public bool NotifyOnDataIssue { get; set; } = true;
     public int MaxRetryCount { get; set; } = 3;
     public int AutoRetryIntervalMinutes { get; set; } = 30;
+    public int PollingIntervalMinutes { get; set; } = 5;
     public bool SqlPushEnabled { get; set; } = false;
     public string? SqlTargetTable { get; set; }
     public string? SqlColumnMappingJson { get; set; }
@@ -143,6 +145,7 @@ public class UpdateAgentRequest
     public bool? NotifyOnDataIssue { get; set; }
     public int? MaxRetryCount { get; set; }
     public int? AutoRetryIntervalMinutes { get; set; }
+    public int? PollingIntervalMinutes { get; set; }
     public bool? SqlPushEnabled { get; set; }
     public string? SqlTargetTable { get; set; }
     public string? SqlColumnMappingJson { get; set; }
