@@ -80,6 +80,16 @@
                  Size="Size.Small"
                  Text="@(_hubConnected ? "Live" : "Polling")" />
     </MudTooltip>
+    @if (_jobs.Any(j => j.BlobName == StartupProbeBlobName))
+    {
+        <MudTooltip Text="Startup-probe jobs run automatically on every application start to verify agent configuration. They are shown separately as status banners above the table.">
+            <MudChip T="string"
+                     Icon="@Icons.Material.Outlined.Info"
+                     Color="Color.Info"
+                     Size="Size.Small"
+                     Text="Startup probes hidden" />
+        </MudTooltip>
+    }
     <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-disabled);">
         @if (_lastRefresh.HasValue)
         {
@@ -272,11 +282,14 @@ else
     private const string StartupProbeBlobName = "[startup-probe]";
 
     private List<BlobWatcherJobDto> _jobs = [];
+    /// <summary>Jobs excluding startup-probe entries (those are shown separately as banners).</summary>
+    private IEnumerable<BlobWatcherJobDto> _nonProbeJobs => _jobs.Where(j => j.BlobName != StartupProbeBlobName);
+
     private List<BlobWatcherJobDto> _filteredJobs => _selectedAgentId switch
     {
-        null  => _jobs,
-        -1    => _jobs.Where(j => j.AgentId == null).ToList(),
-        { } id => _jobs.Where(j => j.AgentId == id).ToList(),
+        null   => _nonProbeJobs.ToList(),
+        -1     => _nonProbeJobs.Where(j => j.AgentId == null).ToList(),
+        { } id => _nonProbeJobs.Where(j => j.AgentId == id).ToList(),
     };
 
     /// <summary>Most-recent startup-probe job per agent that has status "Failed".</summary>
@@ -439,10 +452,11 @@ else
 
     private void ComputeSummary()
     {
-        _completed        = _jobs.Count(j => j.Status == "Completed");
-        _inProgress       = _jobs.Count(j => j.Status is "Detected" or "Validating" or "Inserting" or "Retrying");
-        _failed           = _jobs.Count(j => j.Status is "Failed" or "Rejected");
-        _awaitingApproval = _jobs.Count(j => j.Status is "AwaitingApproval" or "ValidationFailed" or "ReplyReceived");
+        // Exclude startup-probe jobs from summary counts — they are shown in their own banners.
+        _completed        = _nonProbeJobs.Count(j => j.Status == "Completed");
+        _inProgress       = _nonProbeJobs.Count(j => j.Status is "Detected" or "Validating" or "Inserting" or "Retrying");
+        _failed           = _nonProbeJobs.Count(j => j.Status is "Failed" or "Rejected");
+        _awaitingApproval = _nonProbeJobs.Count(j => j.Status is "AwaitingApproval" or "ValidationFailed" or "ReplyReceived");
     }
 
     private void BuildActivityLog()

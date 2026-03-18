@@ -139,6 +139,12 @@ else
                             <MudChip T="string" Color="@(agent.IsEnabled ? Color.Success : Color.Default)"
                                      Size="Size.Small"
                                      Text="@(agent.IsEnabled ? "Active" : "Disabled")" />
+                            <MudTooltip Text="@($"Polls every {agent.PollingIntervalMinutes} minute{(agent.PollingIntervalMinutes == 1 ? "" : "s")}")">
+                                <MudChip T="string" Icon="@Icons.Material.Outlined.Schedule"
+                                         Color="Color.Default"
+                                         Size="Size.Small"
+                                         Text="@($"{agent.PollingIntervalMinutes}m")" />
+                            </MudTooltip>
                         </CardHeaderActions>
                     </MudCardHeader>
 
