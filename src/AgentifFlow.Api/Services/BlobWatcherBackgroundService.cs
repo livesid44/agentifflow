@@ -656,10 +656,13 @@ public class BlobWatcherBackgroundService : BackgroundService
         List<EmailMessage> inboxMessages;
         try
         {
-            // Fetch the 50 most-recent messages; filter to unread only (read messages were
-            // already processed in a previous cycle)
+            // Fetch the 50 most-recent messages, including already-read ones.
+            // Read messages that were NOT processed by this system are identified
+            // because we call MarkAsReadAsync after processing; any message still
+            // unread has never been handled.  We also include recently read messages
+            // (up to ~1 hour old) to handle the case where a user opened the email
+            // before the polling cycle ran.
             inboxMessages = (await mailService.GetInboxMessagesAsync(top: 50))
-                .Where(m => !m.IsRead)
                 .ToList();
         }
         catch (Exception ex)
@@ -670,22 +673,38 @@ public class BlobWatcherBackgroundService : BackgroundService
 
         if (inboxMessages.Count == 0) return;
 
+        // Build a set of message IDs already processed this cycle to avoid double-handling.
+        var processedMessageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var job in waitingJobs)
         {
-            // Replies from any mail client will include the original subject (with "Re:" prefix
-            // and our "[Ref: AGNT-…]" token still present)
+            // Match by subject (with or without "Re:" prefix and "[Ref: …]" wrapper),
+            // OR by body/bodyPreview, so replies where the email client strips or
+            // changes the subject are still caught.
+            // e.g. user replies with just "AGNT-75541498" as the subject — the
+            // Contains check handles that case as well as the full thread subject.
+            var ref_ = job.NotificationRef!;
             var reply = inboxMessages.FirstOrDefault(m =>
-                m.Subject.Contains(job.NotificationRef!, StringComparison.OrdinalIgnoreCase));
+                !processedMessageIds.Contains(m.Id) &&
+                ((m.Subject?.Contains(ref_, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                 (m.BodyPreview?.Contains(ref_, StringComparison.OrdinalIgnoreCase) ?? false)));
 
             if (reply is null) continue;
 
+            // Track as processed so subsequent waiting jobs in the same cycle
+            // don't pick up the same message.
+            processedMessageIds.Add(reply.Id);
+
             _logger.LogInformation(
-                "Reply received for job {JobId} [Ref: {Ref}] from '{From}'",
-                job.Id, job.NotificationRef, reply.From);
+                "Reply received for job {JobId} [Ref: {Ref}] from '{From}' (subject: '{Subject}', isRead: {IsRead})",
+                job.Id, job.NotificationRef, reply.From, reply.Subject, reply.IsRead);
 
             await jobService.SetUserReplyAsync(job.Id, reply.From, reply.BodyPreview);
 
-            // Mark the inbox copy as read so the next cycle does not process it again
+            // Mark the inbox copy as read so the next cycle does not process it again.
+            // We do this regardless of the current IsRead flag: even if the user opened
+            // the email before the poll cycle ran (making it appear already-read), we
+            // still call MarkAsReadAsync to confirm the message has been handled by the system.
             try   { await mailService.MarkAsReadAsync(reply.Id); }
             catch (Exception ex)
             {

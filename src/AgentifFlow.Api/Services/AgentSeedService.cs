@@ -26,11 +26,20 @@ public static class AgentSeedService
     ];
 
     /// <summary>
-    /// Deletes ALL <see cref="BlobWatcherJob"/> rows at application startup.
-    /// This clears any stale pending, failed, or stuck jobs from previous runs so
-    /// that agents start fresh each time the application restarts.  It also removes
-    /// old startup-probe entries so the dashboard always shows only the current run's
-    /// probe results.
+    /// Deletes stale <see cref="BlobWatcherJob"/> rows at application startup.
+    /// <para>
+    /// Jobs that are actively awaiting a human reply
+    /// (<see cref="BlobWatcherJobStatus.AwaitingApproval"/>,
+    /// <see cref="BlobWatcherJobStatus.AwaitingLogConfirmation"/>, or
+    /// <see cref="BlobWatcherJobStatus.AwaitingPocApproval"/>) are <em>preserved</em>
+    /// so that in-flight email conversations (identified by their <c>[Ref: AGNT-…]</c>
+    /// token) continue to work after a restart.
+    /// </para>
+    /// <para>
+    /// All other jobs — including startup-probe entries, pending, processing, failed,
+    /// completed, and rejected jobs — are removed so the dashboard always reflects only
+    /// the current session's activity.
+    /// </para>
     /// </summary>
     public static async Task ClearAllBlobWatcherJobsOnStartupAsync(
         AgentifFlowDbContext db,
@@ -61,14 +70,28 @@ public static class AgentSeedService
             }
         }
 
-        var count = await db.BlobWatcherJobs.CountAsync(ct);
-        if (count > 0)
+        // Statuses that represent an active human-reply conversation — preserve these
+        // so that email threads can be matched across restarts.
+        var awaitingStatuses = new[]
         {
-            // ExecuteDeleteAsync for efficient bulk delete without loading entities.
-            await db.BlobWatcherJobs.ExecuteDeleteAsync(ct);
+            BlobWatcherJobStatus.AwaitingApproval,
+            BlobWatcherJobStatus.AwaitingLogConfirmation,
+            BlobWatcherJobStatus.AwaitingPocApproval,
+        };
+
+        var preserved = await db.BlobWatcherJobs
+            .Where(j => awaitingStatuses.Contains(j.Status))
+            .CountAsync(ct);
+
+        var deleted = await db.BlobWatcherJobs
+            .Where(j => !awaitingStatuses.Contains(j.Status))
+            .ExecuteDeleteAsync(ct);
+
+        if (deleted > 0 || preserved > 0)
+        {
             logger.LogInformation(
-                "Startup cleanup: deleted {Count} existing BlobWatcherJob(s). " +
-                "Agents will start fresh this session.", count);
+                "Startup cleanup: deleted {Deleted} BlobWatcherJob(s), preserved {Preserved} awaiting-reply job(s). " +
+                "Agents will start fresh this session.", deleted, preserved);
         }
         else
         {
@@ -665,15 +688,17 @@ public static class AgentSeedService
 
     /// <summary>
     /// Creates startup-probe <see cref="BlobWatcherJob"/> for every enabled agent.
-    /// <list type="bullet">
-    ///   <item>Agents with the <see cref="SkillType.LogAnalysis"/> skill require Azure OpenAI to be
-    ///   configured.  When the OpenAI endpoint or API key are absent the probe job is immediately
-    ///   set to <see cref="BlobWatcherJobStatus.Failed"/> with an error of
-    ///   "No AI configuration found."</item>
-    ///   <item>All other agents get a <see cref="BlobWatcherJobStatus.Detected"/> probe to confirm
-    ///   the agent is active.</item>
-    /// </list>
-    /// A new probe is inserted on every application startup so operators can track startup history.
+    /// <para>
+    /// All agents receive a <see cref="BlobWatcherJobStatus.Detected"/> probe that confirms
+    /// the agent started successfully.  When an agent has the
+    /// <see cref="SkillType.LogAnalysis"/> skill enabled but Azure OpenAI is not yet
+    /// configured the probe log contains a friendly note — the probe is still
+    /// <em>Detected</em> (not Failed) so the dashboard does not show a misleading alarm.
+    /// The LogAnalysis execution itself will surface the configuration error when it
+    /// actually tries to call the AI service.
+    /// </para>
+    /// A new probe is inserted on every application startup so operators can see when
+    /// the service last restarted.
     /// </summary>
     public static async Task SeedStartupJobsAsync(
         AgentifFlowDbContext db,
@@ -703,29 +728,29 @@ public static class AgentSeedService
             bool needsAi = agent.Skills.Any(s =>
                 s.SkillType == nameof(Models.SkillType.LogAnalysis) && s.IsEnabled);
 
-            BlobWatcherJobStatus probeStatus;
-            string?              errorMessage;
+            // All probes are Detected — the startup probe only confirms the agent is alive.
+            // If AI is needed but not yet configured a note is added to the log so the
+            // operator knows to visit Integration Settings, but the probe itself is not
+            // marked Failed (that status is reserved for real runtime failures).
+            BlobWatcherJobStatus probeStatus  = BlobWatcherJobStatus.Detected;
+            string?              errorMessage = null;
             string               logEntry;
 
             if (needsAi && !aiReady)
             {
-                probeStatus  = BlobWatcherJobStatus.Failed;
-                errorMessage = "No AI configuration found. Please configure the Azure OpenAI " +
-                               "endpoint, API key and deployment name on the Integration Settings page " +
-                               "(Configuration → Integration Settings).";
-                logEntry     = $"[{now:u}] Startup probe — agent '{agent.Name}': " +
-                               "LogAnalysis skill is enabled but no Azure OpenAI configuration was found. " +
-                               "Configure AI settings to enable automated log analysis.";
-                logger.LogWarning(
-                    "Startup probe: agent '{Name}' (Id={Id}) requires AI but OpenAI is not configured.",
+                logEntry = $"[{now:u}] Startup probe — agent '{agent.Name}': " +
+                           "agent is enabled and ready. " +
+                           "Note: the LogAnalysis skill requires Azure OpenAI to be configured " +
+                           "(Configuration → Integration Settings) before automated log analysis will work.";
+                logger.LogInformation(
+                    "Startup probe: agent '{Name}' (Id={Id}) is ready. " +
+                    "Azure OpenAI is not yet configured — LogAnalysis skill will report an error when triggered.",
                     agent.Name, agent.Id);
             }
             else
             {
-                probeStatus  = BlobWatcherJobStatus.Detected;
-                errorMessage = null;
-                logEntry     = $"[{now:u}] Startup probe — agent '{agent.Name}': " +
-                               "agent is enabled and ready.";
+                logEntry = $"[{now:u}] Startup probe — agent '{agent.Name}': " +
+                           "agent is enabled and ready.";
                 logger.LogInformation(
                     "Startup probe: agent '{Name}' (Id={Id}) is ready.",
                     agent.Name, agent.Id);
@@ -733,15 +758,15 @@ public static class AgentSeedService
 
             var job = new BlobWatcherJob
             {
-                BlobName     = StartupProbeBlobName,
+                BlobName      = StartupProbeBlobName,
                 ContainerName = null,
-                AgentId      = agent.Id,
-                Status       = probeStatus,
-                ErrorMessage = errorMessage,
-                LogDetails   = logEntry,
-                DetectedAt   = now,
-                UpdatedAt    = now,
-                CompletedAt  = probeStatus == BlobWatcherJobStatus.Failed ? now : null,
+                AgentId       = agent.Id,
+                Status        = probeStatus,
+                ErrorMessage  = errorMessage,
+                LogDetails    = logEntry,
+                DetectedAt    = now,
+                UpdatedAt     = now,
+                CompletedAt   = null,
             };
 
             db.BlobWatcherJobs.Add(job);
