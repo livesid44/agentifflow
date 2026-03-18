@@ -511,6 +511,31 @@ public class BlobWatcherBackgroundService : BackgroundService
         var jobService  = services.GetRequiredService<IBlobWatcherJobService>();
         var mailService = services.GetRequiredService<IGraphMailService>();
 
+        // ── Deduplication guard ──────────────────────────────────────────────
+        // If an open missing-file job already exists for this agent the alert
+        // has already been sent.  Do not create a new job or send a duplicate
+        // email — the agent will re-check on its next scheduled cycle and
+        // trigger the full workflow as soon as the files appear.
+        var db = services.GetRequiredService<AgentifFlowDbContext>();
+        bool openJobExists = await db.BlobWatcherJobs.AnyAsync(j =>
+            j.AgentId  == agentId &&
+            j.BlobName == NoFileBlobName &&
+            (j.Status == BlobWatcherJobStatus.Detected         ||
+             j.Status == BlobWatcherJobStatus.AwaitingApproval ||
+             j.Status == BlobWatcherJobStatus.Retrying         ||
+             j.Status == BlobWatcherJobStatus.ReplyReceived),
+            ct);
+
+        if (openJobExists)
+        {
+            _logger.LogInformation(
+                "Agent (Id={AgentId}): missing-file notification already sent and awaiting action — " +
+                "skipping duplicate alert. Files will be processed as soon as they are uploaded; " +
+                "agent will retry on its next scheduled cycle.",
+                agentId);
+            return;
+        }
+
         var job  = await jobService.CreateAsync(NoFileBlobName, agentConfig.BlobContainerName, agentId);
         var nref = GenerateRef();
 
@@ -573,9 +598,34 @@ public class BlobWatcherBackgroundService : BackgroundService
         var jobService  = services.GetRequiredService<IBlobWatcherJobService>();
         var mailService = services.GetRequiredService<IGraphMailService>();
 
-        // Create a fresh job record for this poll cycle so every "no file found"
-        // event is visible in the dashboard log — regardless of what happened in
-        // previous cycles.
+        // ── Deduplication guard ──────────────────────────────────────────────
+        // Only send one "no file found" notification per waiting period.  If an
+        // open job already exists the alert has already been sent; skip this
+        // cycle so the inbox is not flooded.  The agent will automatically
+        // re-check every configured cycle and trigger the workflow as soon as
+        // a CSV file appears.
+        var db = services.GetRequiredService<AgentifFlowDbContext>();
+        bool openJobExists = await db.BlobWatcherJobs.AnyAsync(j =>
+            j.AgentId       == null &&
+            j.BlobName      == NoFileBlobName &&
+            j.ContainerName == config.BlobContainerName &&
+            (j.Status == BlobWatcherJobStatus.Detected         ||
+             j.Status == BlobWatcherJobStatus.AwaitingApproval ||
+             j.Status == BlobWatcherJobStatus.Retrying         ||
+             j.Status == BlobWatcherJobStatus.ReplyReceived),
+            ct);
+
+        if (openJobExists)
+        {
+            _logger.LogInformation(
+                "No CSV files in container '{Container}' — notification already sent, " +
+                "waiting for files or reply. Agent will retry on its next scheduled cycle.",
+                config.BlobContainerName);
+            return;
+        }
+
+        // Create a job record for this waiting period so the reference persists
+        // across service restarts and can be matched with email replies.
         var job             = await jobService.CreateAsync(NoFileBlobName, config.BlobContainerName);
         var notificationRef = GenerateRef();
 
@@ -616,7 +666,29 @@ public class BlobWatcherBackgroundService : BackgroundService
         var jobService  = services.GetRequiredService<IBlobWatcherJobService>();
         var mailService = services.GetRequiredService<IGraphMailService>();
 
-        // Create a fresh job record every cycle so every "blob not configured"
+        // ── Deduplication guard ──────────────────────────────────────────────
+        // Only send one "blob not configured" notification per waiting period.
+        // Skip duplicate alerts until the open job is resolved.
+        var db = services.GetRequiredService<AgentifFlowDbContext>();
+        bool openJobExists = await db.BlobWatcherJobs.AnyAsync(j =>
+            j.AgentId       == null &&
+            j.BlobName      == BlobNotConfiguredBlobName &&
+            j.ContainerName == null &&
+            (j.Status == BlobWatcherJobStatus.Detected         ||
+             j.Status == BlobWatcherJobStatus.AwaitingApproval ||
+             j.Status == BlobWatcherJobStatus.Retrying         ||
+             j.Status == BlobWatcherJobStatus.ReplyReceived),
+            ct);
+
+        if (openJobExists)
+        {
+            _logger.LogInformation(
+                "Blob storage not configured — notification already sent. " +
+                "Configure blob storage settings to resolve this alert.");
+            return;
+        }
+
+        // Create a job record every cycle so every "blob not configured"
         // event is visible in the dashboard log.
         var job             = await jobService.CreateAsync(BlobNotConfiguredBlobName, null);
         var notificationRef = GenerateRef();
