@@ -653,16 +653,21 @@ public class BlobWatcherBackgroundService : BackgroundService
         var mailService = services.GetRequiredService<IGraphMailService>();
         var jobService  = services.GetRequiredService<IBlobWatcherJobService>();
 
+        _logger.LogInformation(
+            "Reply poll: {Count} job(s) waiting — refs: {Refs}",
+            waitingJobs.Count,
+            string.Join(", ", waitingJobs.Select(j => j.NotificationRef)));
+
         List<EmailMessage> inboxMessages;
         try
         {
-            // Fetch the 50 most-recent messages, including already-read ones.
+            // Fetch the 100 most-recent messages, including already-read ones.
             // Read messages that were NOT processed by this system are identified
             // because we call MarkAsReadAsync after processing; any message still
             // unread has never been handled.  We also include recently read messages
             // (up to ~1 hour old) to handle the case where a user opened the email
             // before the polling cycle ran.
-            inboxMessages = (await mailService.GetInboxMessagesAsync(top: 50))
+            inboxMessages = (await mailService.GetInboxMessagesAsync(top: 100))
                 .ToList();
         }
         catch (Exception ex)
@@ -671,7 +676,13 @@ public class BlobWatcherBackgroundService : BackgroundService
             return;
         }
 
-        if (inboxMessages.Count == 0) return;
+        if (inboxMessages.Count == 0)
+        {
+            _logger.LogInformation("Reply poll: inbox returned 0 messages — no matches possible.");
+            return;
+        }
+
+        _logger.LogInformation("Reply poll: fetched {Count} inbox message(s).", inboxMessages.Count);
 
         // Build a set of message IDs already processed this cycle to avoid double-handling.
         var processedMessageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -689,7 +700,14 @@ public class BlobWatcherBackgroundService : BackgroundService
                 ((m.Subject?.Contains(ref_, StringComparison.OrdinalIgnoreCase) ?? false) ||
                  (m.BodyPreview?.Contains(ref_, StringComparison.OrdinalIgnoreCase) ?? false)));
 
-            if (reply is null) continue;
+            if (reply is null)
+            {
+                _logger.LogInformation(
+                    "Reply poll: no inbox match for job {JobId} [Ref: {Ref}] (status={Status}). " +
+                    "Ensure a reply is sent to the system mailbox with the ref in the subject or body.",
+                    job.Id, ref_, job.Status);
+                continue;
+            }
 
             // Track as processed so subsequent waiting jobs in the same cycle
             // don't pick up the same message.
@@ -733,9 +751,45 @@ public class BlobWatcherBackgroundService : BackgroundService
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(config.BlobStorageConnectionString) &&
-                !string.IsNullOrWhiteSpace(config.BlobContainerName))
+            // ── Re-trigger: agent-based jobs vs legacy single-config mode ────
+            if (job.AgentId.HasValue)
             {
+                // For agent-based jobs, find the owning agent and trigger its specific
+                // poll cycle rather than the legacy global blob scan.
+                var agent = await db.Agents
+                    .Include(a => a.FileTargets)
+                    .Include(a => a.Skills)
+                    .FirstOrDefaultAsync(a => a.Id == job.AgentId.Value, ct);
+
+                if (agent is not null)
+                {
+                    if (job.BlobName == NoFileBlobName || job.BlobName == BlobNotConfiguredBlobName)
+                    {
+                        _logger.LogInformation(
+                            "Reply for agent sentinel job {JobId} (agent '{AgentName}') — triggering immediate agent re-scan.",
+                            job.Id, agent.Name);
+                        await RunAgentAsync(agent, config, services, db, ct);
+                    }
+                    else
+                    {
+                        _logger.LogInformation(
+                            "Reply for agent file job {JobId} ('{Blob}', agent '{AgentName}') — scheduling retry.",
+                            job.Id, job.BlobName, agent.Name);
+                        await jobService.IncrementRetryAsync(job.Id);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Reply for job {JobId}: owning agent {AgentId} not found — scheduling retry.",
+                        job.Id, job.AgentId.Value);
+                    await jobService.IncrementRetryAsync(job.Id);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(config.BlobStorageConnectionString) &&
+                     !string.IsNullOrWhiteSpace(config.BlobContainerName))
+            {
+                // Legacy single-config mode
                 if (job.BlobName == NoFileBlobName || job.BlobName == BlobNotConfiguredBlobName)
                 {
                     // For sentinel "no-file" jobs the reply means the user has uploaded
@@ -871,18 +925,35 @@ public class BlobWatcherBackgroundService : BackgroundService
         // ── 3. Insert into SQL ────────────────────────────────────────────────
         if (agentConfig.SqlManagementActive && !string.IsNullOrWhiteSpace(agentConfig.SqlConnectionString))
         {
+            // Resolve the effective table name here (mirrors logic inside InsertCsvToSqlAsync)
+            // so we can surface it in logs and job entries before the insert begins.
+            var effectiveSqlTable = !string.IsNullOrWhiteSpace(agentConfig.SqlTargetTable)
+                ? agentConfig.SqlTargetTable
+                : System.Text.RegularExpressions.Regex
+                    .Replace(System.IO.Path.GetFileNameWithoutExtension(blobName), @"[^A-Za-z0-9_]", "_");
+
+            var (sqlServer, sqlDatabase) = SanitizeSqlConnectionString(agentConfig.SqlConnectionString);
+
+            _logger.LogInformation(
+                "SQL push (from Integration Settings): Server={Server}, Database={Database}, Table={Table}, Blob={Blob}.",
+                sqlServer, sqlDatabase, effectiveSqlTable, blobName);
+
             await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Inserting,
-                logEntry: $"Validation passed ({validationResult.RowCount} rows). Starting SQL insert.");
+                logEntry: $"Validation passed ({validationResult.RowCount} rows). " +
+                          $"Starting SQL insert — Server: {sqlServer}, Database: {sqlDatabase}, Table: {effectiveSqlTable}.");
 
             try
             {
                 int rowsInserted = await InsertCsvToSqlAsync(csvContent, blobName, agentConfig);
                 await jobService.SetRowsInsertedAsync(job.Id, rowsInserted);
-                _logger.LogInformation("Completed {BlobName}: {Rows} rows inserted.", blobName, rowsInserted);
+                _logger.LogInformation(
+                    "Completed {BlobName}: {Rows} rows inserted into [{Database}].[{Table}] on {Server}.",
+                    blobName, rowsInserted, sqlDatabase, effectiveSqlTable, sqlServer);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "SQL insert failed for {BlobName}", blobName);
+                _logger.LogError(ex, "SQL insert failed for {BlobName} (Server={Server}, Database={Database}, Table={Table})",
+                    blobName, sqlServer, sqlDatabase, effectiveSqlTable);
 
                 var sqlRef      = GenerateRef();
                 var retryAfter  = AutoRetryAfter(agentConfig);
@@ -903,6 +974,9 @@ public class BlobWatcherBackgroundService : BackgroundService
                         $"[AgentifFlow] SQL Insert Failed: {blobName} [Ref: {sqlRef}]",
                         $"The CSV file \"{blobName}\" passed validation but could not be inserted into " +
                         $"the database.\n\nError: {ex.Message}\n\n" +
+                        $"Target: Server={sqlServer}, Database={sqlDatabase}, Table={effectiveSqlTable}\n\n" +
+                        "Note: The SQL connection string is read from the Integration Settings " +
+                        "(Configuration page), not from appsettings.\n\n" +
                         "Please check the SQL connection string and ensure the database is reachable.\n\n" +
                         retryNote +
                         $"Reply to this email on this thread once the issue is resolved.\n\nReference: {sqlRef}",
@@ -916,7 +990,7 @@ public class BlobWatcherBackgroundService : BackgroundService
         {
             await jobService.UpdateStatusAsync(job.Id, BlobWatcherJobStatus.Inserting,
                 logEntry: agentConfig.SqlManagementActive
-                    ? $"Validation passed ({validationResult.RowCount} rows). SQL push skipped — connection string not configured."
+                    ? $"Validation passed ({validationResult.RowCount} rows). SQL push skipped — no SQL connection string configured in Integration Settings."
                     : $"Validation passed ({validationResult.RowCount} rows). SQL Management skill is disabled for this agent.");
         }
 
@@ -959,11 +1033,25 @@ public class BlobWatcherBackgroundService : BackgroundService
         // ── 5. Success notification ───────────────────────────────────────────
         if (agentConfig.NotifyOnSuccess)
         {
+            string sqlSummary = string.Empty;
+            if (agentConfig.SqlManagementActive && !string.IsNullOrWhiteSpace(agentConfig.SqlConnectionString))
+            {
+                var (srv, db2) = SanitizeSqlConnectionString(agentConfig.SqlConnectionString);
+                var tbl = !string.IsNullOrWhiteSpace(agentConfig.SqlTargetTable)
+                    ? agentConfig.SqlTargetTable
+                    : System.Text.RegularExpressions.Regex
+                        .Replace(System.IO.Path.GetFileNameWithoutExtension(blobName), @"[^A-Za-z0-9_]", "_");
+                var rows = (await jobService.GetByIdAsync(job.Id))?.RowsInserted ?? 0;
+                sqlSummary = $"Rows inserted: {rows}\n" +
+                             $"SQL target:   Server={srv}, Database={db2}, Table={tbl}\n" +
+                             "(Connection string from Integration Settings)\n";
+            }
+
             await TrySendEmailAsync(mailService, agentConfig.NotificationEmail,
                 $"[AgentifFlow] File Processed Successfully: {blobName}",
                 $"The AgentifFlow agent \"{agentConfig.AgentName}\" has successfully processed the file \"{blobName}\".\n\n" +
                 $"Container: {agentConfig.BlobContainerName}\n" +
-                (agentConfig.SqlManagementActive ? $"Rows inserted: {(await jobService.GetByIdAsync(job.Id))?.RowsInserted ?? 0}\n" : "") +
+                sqlSummary +
                 $"Processed at: {DateTime.UtcNow:u}",
                 $"success [{blobName}]");
         }
@@ -1398,6 +1486,21 @@ public class BlobWatcherBackgroundService : BackgroundService
         if (string.IsNullOrWhiteSpace(agentConfig.SqlConnectionString))
             throw new InvalidOperationException("SQL connection string is not configured.");
 
+        // Guard against accidentally using a SQLite connection string instead of a SQL Server one.
+        // A SQLite connection string starts with "Data Source=" and does not contain a "Server=" keyword.
+        var trimmedConnStr = agentConfig.SqlConnectionString.TrimStart();
+        if (trimmedConnStr.StartsWith("Data Source=", StringComparison.OrdinalIgnoreCase) &&
+            !agentConfig.SqlConnectionString.Contains("Server=", StringComparison.OrdinalIgnoreCase) &&
+            !agentConfig.SqlConnectionString.Contains("server=", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "The SQL connection string in Integration Settings appears to be a SQLite path " +
+                "(starts with 'Data Source=') rather than a SQL Server connection string. " +
+                "Please update the SQL Database connection string in the Integration Settings " +
+                "to a valid SQL Server connection string, e.g.: " +
+                "Server=myserver.database.windows.net;Database=mydb;User Id=myuser;Password=mypass;TrustServerCertificate=True;");
+        }
+
         var lines = csvContent
             .Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Select(l => l.TrimEnd('\r'))
@@ -1516,6 +1619,29 @@ public class BlobWatcherBackgroundService : BackgroundService
     // ──────────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Extracts just the Server and Database components from a SQL Server connection string
+    /// for safe display in logs and UI (no passwords are included).
+    /// The connection string is always sourced from Integration Settings (AppConfiguration),
+    /// never from appsettings.json.
+    /// </summary>
+    private static (string Server, string Database) SanitizeSqlConnectionString(string? connStr)
+    {
+        if (string.IsNullOrWhiteSpace(connStr))
+            return ("(not configured)", "(not configured)");
+        try
+        {
+            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connStr);
+            var server  = string.IsNullOrWhiteSpace(builder.DataSource)     ? "(unknown)" : builder.DataSource;
+            var db      = string.IsNullOrWhiteSpace(builder.InitialCatalog) ? "(unknown)" : builder.InitialCatalog;
+            return (server, db);
+        }
+        catch
+        {
+            return ("(parse error)", "(parse error)");
+        }
+    }
 
     /// <summary>
     /// Resolves a file target's pattern into the expected blob name for the given poll date.
