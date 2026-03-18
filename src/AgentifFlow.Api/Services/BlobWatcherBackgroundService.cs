@@ -53,19 +53,35 @@ public class BlobWatcherBackgroundService : BackgroundService
                 var config = await db.AppConfigurations.FirstOrDefaultAsync(stoppingToken);
 
                 // ── 1. Multi-agent polling ────────────────────────────────────
-                // Query enabled agents first: individual agents being enabled is
-                // sufficient to trigger polling — the global AgentFlowEnabled flag
-                // is only required for the legacy single-config mode.
-                var agents = config is null
-                    ? new System.Collections.Generic.List<Agent>()
-                    : await db.Agents
-                        .Include(a => a.FileTargets)
-                        .Include(a => a.Skills)
-                        .Where(a => a.IsEnabled)
-                        .ToListAsync(stoppingToken);
+                // Always query enabled agents regardless of the global AgentFlowEnabled
+                // flag — individual agents being enabled is sufficient to trigger
+                // polling without requiring the global switch.
+                var agents = await db.Agents
+                    .Include(a => a.FileTargets)
+                    .Include(a => a.Skills)
+                    .Where(a => a.IsEnabled)
+                    .ToListAsync(stoppingToken);
 
-                if (config is null || (!config.AgentFlowEnabled && agents.Count == 0))
+                _logger.LogInformation(
+                    "Poll cycle started — {AgentCount} enabled agent(s), AgentFlowEnabled={GlobalFlag}.",
+                    agents.Count,
+                    config?.AgentFlowEnabled ?? false);
+
+                if (config is null)
                 {
+                    if (agents.Count == 0)
+                    {
+                        _logger.LogInformation("No app configuration and no enabled agents — sleeping 30 s.");
+                        await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                        continue;
+                    }
+
+                    // Agents exist but no global config yet — cannot run agents that depend
+                    // on global connection strings. Log and wait for user to configure.
+                    _logger.LogWarning(
+                        "{AgentCount} enabled agent(s) found but app configuration is missing. " +
+                        "Please save the Integration Settings to start agent polling.",
+                        agents.Count);
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
@@ -75,6 +91,8 @@ public class BlobWatcherBackgroundService : BackgroundService
                 // Sleep no longer than necessary: if any agent has a shorter polling
                 // interval than the global BlobPollIntervalSeconds, cap the sleep so
                 // the loop wakes up in time to honour that agent's schedule.
+                // Subtract a 5-second buffer to guard against Task.Delay imprecision
+                // so agents at the boundary of their interval are never skipped.
                 sleepSeconds = pollInterval;
                 if (agents.Count > 0)
                 {
@@ -82,6 +100,8 @@ public class BlobWatcherBackgroundService : BackgroundService
                         (a.PollingIntervalMinutes > 0 ? a.PollingIntervalMinutes : 5) * 60);
                     sleepSeconds = Math.Min(sleepSeconds, minAgentSecs);
                 }
+                // Wake up slightly early to avoid floating-point drift causing skips
+                sleepSeconds = Math.Max(5, sleepSeconds - 5);
 
                 if (agents.Count > 0)
                 {
@@ -89,16 +109,23 @@ public class BlobWatcherBackgroundService : BackgroundService
                     {
                         // Honour per-agent polling interval: skip the agent if its
                         // configured schedule has not elapsed since the last run.
-                        var intervalMinutes = agent.PollingIntervalMinutes > 0 ? agent.PollingIntervalMinutes : 5;
+                        // Use a 5-second grace window to absorb Task.Delay imprecision
+                        // and avoid perpetually skipping agents with short intervals.
+                        var intervalSeconds = (agent.PollingIntervalMinutes > 0 ? agent.PollingIntervalMinutes : 5) * 60;
                         if (_agentLastPolled.TryGetValue(agent.Id, out var lastPolled) &&
-                            (cycleStart - lastPolled).TotalMinutes < intervalMinutes)
+                            (cycleStart - lastPolled).TotalSeconds < intervalSeconds - 5)
                         {
-                            _logger.LogDebug(
-                                "Agent '{Name}' (Id={Id}): skipping — next poll in {Remaining:F1} min.",
-                                agent.Name, agent.Id,
-                                intervalMinutes - (cycleStart - lastPolled).TotalMinutes);
+                            var remaining = intervalSeconds - (cycleStart - lastPolled).TotalSeconds;
+                            _logger.LogInformation(
+                                "Agent '{Name}' (Id={Id}): interval not elapsed — next poll in {Remaining:F0} s.",
+                                agent.Name, agent.Id, remaining);
                             continue;
                         }
+
+                        _logger.LogInformation(
+                            "Agent '{Name}' (Id={Id}): starting poll cycle (interval={Interval} min).",
+                            agent.Name, agent.Id,
+                            agent.PollingIntervalMinutes > 0 ? agent.PollingIntervalMinutes : 5);
 
                         _agentLastPolled[agent.Id] = cycleStart;
                         await RunAgentAsync(agent, config, scope.ServiceProvider, db, stoppingToken);
@@ -249,8 +276,15 @@ public class BlobWatcherBackgroundService : BackgroundService
             }
 
             // Send a single consolidated notification for all missing required files.
-            if (missingRequiredFiles.Count > 0 && agentConfig.NotifyOnFileNotFound)
-                await SendMissingFilesNotificationAsync(missingRequiredFiles, agentConfig, agent.Id, services, ct);
+            if (missingRequiredFiles.Count > 0)
+            {
+                if (agentConfig.NotifyOnFileNotFound)
+                    await SendMissingFilesNotificationAsync(missingRequiredFiles, agentConfig, agent.Id, services, ct);
+                else
+                    _logger.LogInformation(
+                        "Agent '{Name}': {Count} required file(s) missing but NotifyOnFileNotFound=false — no email sent.",
+                        agent.Name, missingRequiredFiles.Count);
+            }
         }
         else
         {
@@ -940,7 +974,7 @@ public class BlobWatcherBackgroundService : BackgroundService
     {
         if (string.IsNullOrWhiteSpace(to))
         {
-            _logger.LogDebug("Skipping '{Subject}' — NotificationEmail is not configured.", subject);
+            _logger.LogWarning("Skipping email '{Subject}' — NotificationEmail is not set on the agent or global config.", subject);
             return false;
         }
 

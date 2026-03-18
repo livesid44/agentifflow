@@ -318,6 +318,13 @@ using (var scope = app.Services.CreateScope())
                     ""UpdatedAt""     TEXT    NOT NULL DEFAULT ''
                 );");
         }
+        // ── Clear all existing BlobWatcherJobs ───────────────────────────────
+        // Removes stale pending/failed/stuck jobs from previous sessions so agents
+        // start fresh and the dashboard shows only current-run activity.  This also
+        // clears old startup-probe rows so the probe panel is never stale.
+        await AgentifFlow.Api.Services.AgentSeedService.ClearAllBlobWatcherJobsOnStartupAsync(
+            db, startupLogger, CancellationToken.None);
+
         // ── Seed built-in demo agents ─────────────────────────────────────────
         await AgentifFlow.Api.Services.AgentSeedService.SeedNerandomilastAgentAsync(
             db, startupLogger, CancellationToken.None);

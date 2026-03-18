@@ -26,6 +26,57 @@ public static class AgentSeedService
     ];
 
     /// <summary>
+    /// Deletes ALL <see cref="BlobWatcherJob"/> rows at application startup.
+    /// This clears any stale pending, failed, or stuck jobs from previous runs so
+    /// that agents start fresh each time the application restarts.  It also removes
+    /// old startup-probe entries so the dashboard always shows only the current run's
+    /// probe results.
+    /// </summary>
+    public static async Task ClearAllBlobWatcherJobsOnStartupAsync(
+        AgentifFlowDbContext db,
+        ILogger logger,
+        CancellationToken ct = default)
+    {
+        // Guard: BlobWatcherJobs table may not exist on first boot before migrations run.
+        if (db.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            var conn = db.Database.GetDbConnection();
+            var shouldClose = conn.State != ConnectionState.Open;
+            if (shouldClose) await conn.OpenAsync(ct);
+            try
+            {
+                using var chk = conn.CreateCommand();
+                chk.CommandText =
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='BlobWatcherJobs'";
+                var tableExists = Convert.ToInt32(await chk.ExecuteScalarAsync(ct)) > 0;
+                if (!tableExists)
+                {
+                    logger.LogDebug("Startup cleanup: 'BlobWatcherJobs' table not found — skipping.");
+                    return;
+                }
+            }
+            finally
+            {
+                if (shouldClose) await conn.CloseAsync();
+            }
+        }
+
+        var count = await db.BlobWatcherJobs.CountAsync(ct);
+        if (count > 0)
+        {
+            // ExecuteDeleteAsync for efficient bulk delete without loading entities.
+            await db.BlobWatcherJobs.ExecuteDeleteAsync(ct);
+            logger.LogInformation(
+                "Startup cleanup: deleted {Count} existing BlobWatcherJob(s). " +
+                "Agents will start fresh this session.", count);
+        }
+        else
+        {
+            logger.LogDebug("Startup cleanup: no existing BlobWatcherJobs to clear.");
+        }
+    }
+
+    /// <summary>
     /// Seeds the "Nerandomilast Target Files Monitor" demo agent if it does not already exist,
     /// or upgrades an existing seeded agent to use dynamic date patterns and the SQL Management skill.
     ///
