@@ -252,6 +252,10 @@ using (var scope = app.Services.CreateScope())
             await EnsureSqliteColumnAsync(db, startupLogger,
                 table: "BlobWatcherJobs",   column: "AgentId",                 definition: "INTEGER NULL");
 
+            // Per-agent schedule (added in 20260317000000_AddPollingIntervalMinutes)
+            await EnsureSqliteColumnAsync(db, startupLogger,
+                table: "Agents", column: "PollingIntervalMinutes", definition: "INTEGER NOT NULL DEFAULT 5");
+
             // Multi-agent: Agents table (added in 20260316000000_AddAgents)
             await EnsureSqliteTableAsync(db, startupLogger, "Agents", @"
                 CREATE TABLE IF NOT EXISTS ""Agents"" (
@@ -266,6 +270,7 @@ using (var scope = app.Services.CreateScope())
                     ""NotifyOnDataIssue""        INTEGER NOT NULL DEFAULT 1,
                     ""MaxRetryCount""            INTEGER NOT NULL DEFAULT 3,
                     ""AutoRetryIntervalMinutes"" INTEGER NOT NULL DEFAULT 30,
+                    ""PollingIntervalMinutes""   INTEGER NOT NULL DEFAULT 5,
                     ""SqlPushEnabled""           INTEGER NOT NULL DEFAULT 0,
                     ""SqlTargetTable""           TEXT    NULL,
                     ""SqlColumnMappingJson""     TEXT    NULL,

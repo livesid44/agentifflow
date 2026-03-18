@@ -74,6 +74,12 @@ public class Agent
     public bool NotifyOnFileNotFound { get; set; } = true;
     public bool NotifyOnDataIssue { get; set; } = true;
 
+    // ── Schedule ─────────────────────────────────────────────────────────────
+
+    /// <summary>How often (in minutes) the background service runs this agent's poll cycle. Default: 5.</summary>
+    [System.ComponentModel.DataAnnotations.Range(1, 1440)]
+    public int PollingIntervalMinutes { get; set; } = 5;
+
     // ── Retry ────────────────────────────────────────────────────────────────
 
     [System.ComponentModel.DataAnnotations.Range(0, 100)]
@@ -162,6 +168,7 @@ public class AgentDto
     public bool NotifyOnDataIssue { get; set; }
     public int MaxRetryCount { get; set; }
     public int AutoRetryIntervalMinutes { get; set; }
+    public int PollingIntervalMinutes { get; set; }
     public bool SqlPushEnabled { get; set; }
     public string? SqlTargetTable { get; set; }
     public string? SqlColumnMappingJson { get; set; }
@@ -209,6 +216,7 @@ public class CreateAgentRequest
     public bool NotifyOnDataIssue { get; set; } = true;
     public int MaxRetryCount { get; set; } = 3;
     public int AutoRetryIntervalMinutes { get; set; } = 30;
+    public int PollingIntervalMinutes { get; set; } = 5;
     public bool SqlPushEnabled { get; set; } = false;
 
     [MaxLength(300)]
@@ -245,6 +253,7 @@ public class UpdateAgentRequest
     public bool? NotifyOnDataIssue { get; set; }
     public int? MaxRetryCount { get; set; }
     public int? AutoRetryIntervalMinutes { get; set; }
+    public int? PollingIntervalMinutes { get; set; }
     public bool? SqlPushEnabled { get; set; }
 
     [MaxLength(300)]

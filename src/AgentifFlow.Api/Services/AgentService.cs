@@ -54,6 +54,7 @@ public class AgentService : IAgentService
             NotifyOnDataIssue        = request.NotifyOnDataIssue,
             MaxRetryCount            = request.MaxRetryCount,
             AutoRetryIntervalMinutes = request.AutoRetryIntervalMinutes,
+            PollingIntervalMinutes   = request.PollingIntervalMinutes,
             SqlPushEnabled           = request.SqlPushEnabled,
             SqlTargetTable           = request.SqlTargetTable,
             SqlColumnMappingJson     = request.SqlColumnMappingJson,
@@ -95,6 +96,7 @@ public class AgentService : IAgentService
         if (request.NotifyOnDataIssue.HasValue)           agent.NotifyOnDataIssue        = request.NotifyOnDataIssue.Value;
         if (request.MaxRetryCount.HasValue)               agent.MaxRetryCount            = request.MaxRetryCount.Value;
         if (request.AutoRetryIntervalMinutes.HasValue)    agent.AutoRetryIntervalMinutes = request.AutoRetryIntervalMinutes.Value;
+        if (request.PollingIntervalMinutes.HasValue)      agent.PollingIntervalMinutes   = request.PollingIntervalMinutes.Value;
         if (request.SqlPushEnabled.HasValue)              agent.SqlPushEnabled           = request.SqlPushEnabled.Value;
         if (request.SqlTargetTable is not null)           agent.SqlTargetTable           = request.SqlTargetTable;
         if (request.SqlColumnMappingJson is not null)     agent.SqlColumnMappingJson     = request.SqlColumnMappingJson;
@@ -315,6 +317,7 @@ public class AgentService : IAgentService
         NotifyOnDataIssue        = a.NotifyOnDataIssue,
         MaxRetryCount            = a.MaxRetryCount,
         AutoRetryIntervalMinutes = a.AutoRetryIntervalMinutes,
+        PollingIntervalMinutes   = a.PollingIntervalMinutes,
         SqlPushEnabled           = a.SqlPushEnabled,
         SqlTargetTable           = a.SqlTargetTable,
         SqlColumnMappingJson     = a.SqlColumnMappingJson,
