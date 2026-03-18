@@ -44,6 +44,7 @@ public class BlobWatcherBackgroundService : BackgroundService
         {
             var cycleStart = DateTime.UtcNow;
             int pollInterval = 60;
+            int sleepSeconds = pollInterval; // may be reduced by min agent interval
 
             try
             {
@@ -59,6 +60,7 @@ public class BlobWatcherBackgroundService : BackgroundService
                     ? new System.Collections.Generic.List<Agent>()
                     : await db.Agents
                         .Include(a => a.FileTargets)
+                        .Include(a => a.Skills)
                         .Where(a => a.IsEnabled)
                         .ToListAsync(stoppingToken);
 
@@ -69,6 +71,17 @@ public class BlobWatcherBackgroundService : BackgroundService
                 }
 
                 pollInterval = config.BlobPollIntervalSeconds > 0 ? config.BlobPollIntervalSeconds : 60;
+
+                // Sleep no longer than necessary: if any agent has a shorter polling
+                // interval than the global BlobPollIntervalSeconds, cap the sleep so
+                // the loop wakes up in time to honour that agent's schedule.
+                sleepSeconds = pollInterval;
+                if (agents.Count > 0)
+                {
+                    var minAgentSecs = agents.Min(a =>
+                        (a.PollingIntervalMinutes > 0 ? a.PollingIntervalMinutes : 5) * 60);
+                    sleepSeconds = Math.Min(sleepSeconds, minAgentSecs);
+                }
 
                 if (agents.Count > 0)
                 {
@@ -115,7 +128,7 @@ public class BlobWatcherBackgroundService : BackgroundService
             }
 
             var elapsed  = DateTime.UtcNow - cycleStart;
-            var waitTime = TimeSpan.FromSeconds(pollInterval) - elapsed;
+            var waitTime = TimeSpan.FromSeconds(sleepSeconds) - elapsed;
             if (waitTime > TimeSpan.Zero)
                 await Task.Delay(waitTime, stoppingToken);
         }
