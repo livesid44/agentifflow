@@ -13,7 +13,15 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 // ── MudBlazor ────────────────────────────────────────────────────────────────
 builder.Services.AddMudServices();
 
-var apiBaseUrl      = builder.Configuration["ApiConfig:BaseUrl"]      ?? "https://localhost:7001";
+// Resolve the API base URL.  In development the URL is set explicitly in
+// wwwroot/appsettings.Development.json.  In a published deployment where the
+// Blazor WASM is served from the same host as the API, leave ApiConfig:BaseUrl
+// empty (or absent) and the app will automatically use the current host origin.
+var configuredBaseUrl = builder.Configuration["ApiConfig:BaseUrl"];
+var apiBaseUrl = !string.IsNullOrWhiteSpace(configuredBaseUrl)
+    ? configuredBaseUrl
+    : builder.HostEnvironment.BaseAddress.TrimEnd('/');
+
 var enableDevLogin  = builder.Configuration.GetValue<bool>("ApiConfig:EnableDevLogin");
 
 if (enableDevLogin)

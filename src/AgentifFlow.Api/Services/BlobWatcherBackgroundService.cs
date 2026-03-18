@@ -76,14 +76,19 @@ public class BlobWatcherBackgroundService : BackgroundService
                         continue;
                     }
 
-                    // Agents exist but no global config yet — cannot run agents that depend
-                    // on global connection strings. Log and wait for user to configure.
-                    _logger.LogWarning(
-                        "{AgentCount} enabled agent(s) found but app configuration is missing. " +
-                        "Please save the Integration Settings to start agent polling.",
+                    // Agents exist but no global configuration is saved yet.
+                    // Use a minimal fallback so that agents which do not require global
+                    // credentials (e.g. ThirdPartyApiIntegration-only agents) can still
+                    // run on their configured schedule.  Agents that need blob storage or
+                    // SQL will be skipped gracefully inside RunAgentAsync.
+                    // Fallback defaults: BlobPollIntervalSeconds=60, MaxRetryCount=3,
+                    // AutoRetryIntervalMinutes=30 (from AppConfiguration property initializers).
+                    _logger.LogInformation(
+                        "{AgentCount} enabled agent(s) found — no global app configuration saved yet. " +
+                        "Agents that do not need global settings will still run; " +
+                        "save Integration Settings to enable full functionality.",
                         agents.Count);
-                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
-                    continue;
+                    config = new AppConfiguration();
                 }
 
                 pollInterval = config.BlobPollIntervalSeconds > 0 ? config.BlobPollIntervalSeconds : 60;
