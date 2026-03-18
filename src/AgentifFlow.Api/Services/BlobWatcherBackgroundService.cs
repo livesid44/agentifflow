@@ -1145,8 +1145,29 @@ public class BlobWatcherBackgroundService : BackgroundService
             System.Security.Cryptography.SHA256.HashData(
                 System.Text.Encoding.UTF8.GetBytes(apiConfig.EndpointUrl)))[..16];
         var sentinelBlobName = ExternalApiJobBlobName + urlHash;
-        if (await jobService.ExistsAsync(sentinelBlobName, agentConfig.BlobContainerName ?? ExternalApiContainerName))
-            return;
+        var containerName    = agentConfig.BlobContainerName ?? ExternalApiContainerName;
+
+        // Skip only while a job is actively being processed (downloaded / retrying).
+        // Jobs in Awaiting* states are waiting for a human reply; they must NOT block
+        // the agent from re-checking the API on every configured poll interval so that
+        // the system detects recovery (or continued failure) and acts accordingly.
+        bool inFlight = await db.BlobWatcherJobs.AnyAsync(j =>
+            j.AgentId  == agent.Id       &&
+            j.BlobName == sentinelBlobName &&
+            (j.Status == BlobWatcherJobStatus.Detected      ||
+             j.Status == BlobWatcherJobStatus.Retrying      ||
+             j.Status == BlobWatcherJobStatus.ReplyReceived), ct);
+        if (inFlight) return;
+
+        // Find any existing job that is currently waiting for a human response.
+        var existingWaitingJob = await db.BlobWatcherJobs
+            .Where(j => j.AgentId  == agent.Id       &&
+                        j.BlobName == sentinelBlobName &&
+                        (j.Status == BlobWatcherJobStatus.AwaitingApproval        ||
+                         j.Status == BlobWatcherJobStatus.AwaitingLogConfirmation  ||
+                         j.Status == BlobWatcherJobStatus.AwaitingPocApproval))
+            .OrderByDescending(j => j.DetectedAt)
+            .FirstOrDefaultAsync(ct);
 
         string responseBody;
         try
@@ -1200,6 +1221,32 @@ public class BlobWatcherBackgroundService : BackgroundService
         {
             _logger.LogDebug("Agent '{Name}': ThirdPartyApi check passed for '{Url}'.", agent.Name, apiConfig.EndpointUrl);
 
+            // ── API has recovered ─────────────────────────────────────────────────
+            // If there is an AwaitingApproval job (a simple failure notification),
+            // auto-close it so the dashboard reflects the recovery and a fresh check
+            // can start on the next cycle.  Multi-step log-analysis jobs
+            // (AwaitingLogConfirmation / AwaitingPocApproval) are left open because
+            // the human review workflow must still complete.
+            if (existingWaitingJob is not null)
+            {
+                if (existingWaitingJob.Status == BlobWatcherJobStatus.AwaitingApproval)
+                {
+                    _logger.LogInformation(
+                        "Agent '{Name}': API recovered — auto-closing job {Id} that was awaiting approval.",
+                        agent.Name, existingWaitingJob.Id);
+                    await jobService.UpdateStatusAsync(existingWaitingJob.Id, BlobWatcherJobStatus.Completed,
+                        logEntry: $"API health check passed at {DateTime.UtcNow:u} — previous failure resolved. Job auto-closed.");
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Agent '{Name}': API recovered — job {Id} ({Status}) still requires manual review to complete.",
+                        agent.Name, existingWaitingJob.Id, existingWaitingJob.Status);
+                    await jobService.UpdateStatusAsync(existingWaitingJob.Id, existingWaitingJob.Status,
+                        logEntry: $"API health check passed at {DateTime.UtcNow:u}. API appears recovered but manual review is still pending.");
+                }
+            }
+
             // ── No new failure detected — but check for a previous Failed job whose
             //    logs have not yet been analyzed.  When found, re-run the LogAnalysis
             //    workflow so that the stored failure logs are not silently dropped even
@@ -1226,9 +1273,24 @@ public class BlobWatcherBackgroundService : BackgroundService
 
         _logger.LogWarning("Agent '{Name}': ThirdPartyApi failure detected at '{Url}'.", agent.Name, apiConfig.EndpointUrl);
 
+        // ── Deduplication: a notification is already awaiting a human response ──
+        // Do not send another email — just log the re-check so the audit trail
+        // shows the failure is ongoing.  The agent will try again on the next
+        // configured poll interval regardless.
+        if (existingWaitingJob is not null)
+        {
+            _logger.LogInformation(
+                "Agent '{Name}': API still failing — job {Id} ({Status}) is already awaiting response. Re-check logged, no duplicate notification sent.",
+                agent.Name, existingWaitingJob.Id, existingWaitingJob.Status);
+            await jobService.UpdateStatusAsync(existingWaitingJob.Id, existingWaitingJob.Status,
+                logEntry: $"API failure re-confirmed on poll at {DateTime.UtcNow:u}. Awaiting response.");
+            return;
+        }
+
+        // No active notification — create a new job and send failure notification.
         var job = await jobService.CreateAsync(
             sentinelBlobName,
-            agentConfig.BlobContainerName ?? ExternalApiContainerName,
+            containerName,
             agent.Id);
 
         if (agentConfig.LogAnalysisActive)
