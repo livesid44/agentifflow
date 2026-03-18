@@ -1,0 +1,142 @@
+using AgentifFlow.Api.Data;
+using AgentifFlow.Api.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace AgentifFlow.Api.Services;
+
+public class AppConfigurationService : IAppConfigurationService
+{
+    private readonly AgentifFlowDbContext _db;
+    private readonly ILogger<AppConfigurationService> _logger;
+
+    public AppConfigurationService(AgentifFlowDbContext db, ILogger<AppConfigurationService> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
+
+    public async Task<AppConfigurationDto> GetConfigurationAsync()
+    {
+        var config = await _db.AppConfigurations.FirstOrDefaultAsync();
+        if (config is null)
+            return new AppConfigurationDto();
+
+        return ToDto(config);
+    }
+
+    public async Task<AppConfigurationDto> UpdateConfigurationAsync(
+        UpdateAppConfigurationRequest request, string updatedBy)
+    {
+        _logger.LogInformation("Updating app configuration by {User}", updatedBy);
+
+        var config = await _db.AppConfigurations.FirstOrDefaultAsync()
+                     ?? new AppConfiguration();
+
+        // Only overwrite a field when the caller actually supplies a non-null value.
+        // Supplying an empty string intentionally clears the field.
+        if (request.GraphTenantId is not null) config.GraphTenantId = request.GraphTenantId;
+        if (request.GraphClientId is not null) config.GraphClientId = request.GraphClientId;
+        if (request.GraphClientSecret is not null) config.GraphClientSecret = request.GraphClientSecret;
+        if (request.GraphScopes is not null) config.GraphScopes = request.GraphScopes;
+        if (request.GraphMailboxAddress is not null) config.GraphMailboxAddress = request.GraphMailboxAddress;
+        if (request.OpenAiEndpoint is not null) config.OpenAiEndpoint = request.OpenAiEndpoint;
+        if (request.OpenAiApiKey is not null) config.OpenAiApiKey = request.OpenAiApiKey;
+        if (request.OpenAiDeploymentName is not null) config.OpenAiDeploymentName = request.OpenAiDeploymentName;
+        if (request.BlobStorageConnectionString is not null) config.BlobStorageConnectionString = request.BlobStorageConnectionString;
+        if (request.BlobContainerName is not null) config.BlobContainerName = request.BlobContainerName;
+        if (request.SqlConnectionString is not null) config.SqlConnectionString = request.SqlConnectionString;
+        if (request.NotificationEmail is not null) config.NotificationEmail = request.NotificationEmail;
+        if (request.BlobPollIntervalSeconds.HasValue) config.BlobPollIntervalSeconds = request.BlobPollIntervalSeconds.Value;
+        if (request.MaxRetryCount.HasValue) config.MaxRetryCount = request.MaxRetryCount.Value;
+        if (request.AutoRetryIntervalMinutes.HasValue) config.AutoRetryIntervalMinutes = request.AutoRetryIntervalMinutes.Value;
+        if (request.AgentFlowEnabled.HasValue) config.AgentFlowEnabled = request.AgentFlowEnabled.Value;
+
+        // Agent Designer fields
+        if (request.BlobEnabled.HasValue)             config.BlobEnabled             = request.BlobEnabled.Value;
+        if (request.BlobReadEmailId is not null)      config.BlobReadEmailId         = request.BlobReadEmailId;
+        if (request.BlobReadEmailAppendDate.HasValue) config.BlobReadEmailAppendDate = request.BlobReadEmailAppendDate.Value;
+        if (request.BlobInputFilePattern is not null) config.BlobInputFilePattern    = request.BlobInputFilePattern;
+        if (request.BlobInputAppendDate.HasValue)     config.BlobInputAppendDate     = request.BlobInputAppendDate.Value;
+        if (request.BlobArchiveFilePattern is not null) config.BlobArchiveFilePattern = request.BlobArchiveFilePattern;
+        if (request.BlobArchiveAppendDate.HasValue)   config.BlobArchiveAppendDate   = request.BlobArchiveAppendDate.Value;
+        if (request.NotifyOnSuccess.HasValue)         config.NotifyOnSuccess         = request.NotifyOnSuccess.Value;
+        if (request.NotifyOnFileNotFound.HasValue)    config.NotifyOnFileNotFound    = request.NotifyOnFileNotFound.Value;
+        if (request.NotifyOnDataIssue.HasValue)       config.NotifyOnDataIssue       = request.NotifyOnDataIssue.Value;
+        if (request.SqlPushEnabled.HasValue)          config.SqlPushEnabled          = request.SqlPushEnabled.Value;
+        if (request.SqlTargetTable is not null)       config.SqlTargetTable          = request.SqlTargetTable;
+        if (request.SqlColumnMappingJson is not null) config.SqlColumnMappingJson    = request.SqlColumnMappingJson;
+
+        config.UpdatedAt = DateTime.UtcNow;
+        config.UpdatedBy = updatedBy;
+
+        if (config.Id == 0)
+            _db.AppConfigurations.Add(config);
+
+        await _db.SaveChangesAsync();
+        return ToDto(config);
+    }
+
+    public async Task<(string? Endpoint, string? ApiKey, string? DeploymentName)> GetOpenAiRawSettingsAsync()
+    {
+        var config = await _db.AppConfigurations.FirstOrDefaultAsync();
+        return (config?.OpenAiEndpoint, config?.OpenAiApiKey, config?.OpenAiDeploymentName);
+    }
+
+    public async Task<(string? TenantId, string? ClientId, string? ClientSecret, string? MailboxAddress)> GetGraphRawSettingsAsync()
+    {
+        var config = await _db.AppConfigurations.FirstOrDefaultAsync();
+        return (config?.GraphTenantId, config?.GraphClientId, config?.GraphClientSecret, config?.GraphMailboxAddress);
+    }
+
+    public async Task<string?> GetBlobRawSettingsAsync()
+    {
+        var config = await _db.AppConfigurations.FirstOrDefaultAsync();
+        return config?.BlobStorageConnectionString;
+    }
+
+    public async Task<string?> GetSqlRawSettingsAsync()
+    {
+        var config = await _db.AppConfigurations.FirstOrDefaultAsync();
+        return config?.SqlConnectionString;
+    }
+
+    private static AppConfigurationDto ToDto(AppConfiguration config) => new()
+    {
+        GraphTenantId = config.GraphTenantId,
+        GraphClientId = config.GraphClientId,
+        GraphClientSecret = Mask(config.GraphClientSecret),
+        GraphScopes = config.GraphScopes,
+        GraphMailboxAddress = config.GraphMailboxAddress,
+        OpenAiEndpoint = config.OpenAiEndpoint,
+        OpenAiApiKey = Mask(config.OpenAiApiKey),
+        OpenAiDeploymentName = config.OpenAiDeploymentName,
+        BlobStorageConnectionString = Mask(config.BlobStorageConnectionString),
+        BlobContainerName = config.BlobContainerName,
+        SqlConnectionString = Mask(config.SqlConnectionString),
+        NotificationEmail = config.NotificationEmail,
+        BlobPollIntervalSeconds = config.BlobPollIntervalSeconds,
+        MaxRetryCount = config.MaxRetryCount,
+        AutoRetryIntervalMinutes = config.AutoRetryIntervalMinutes,
+        AgentFlowEnabled = config.AgentFlowEnabled,
+        // Agent Designer
+        BlobEnabled             = config.BlobEnabled,
+        BlobReadEmailId         = config.BlobReadEmailId,
+        BlobReadEmailAppendDate = config.BlobReadEmailAppendDate,
+        BlobInputFilePattern    = config.BlobInputFilePattern,
+        BlobInputAppendDate     = config.BlobInputAppendDate,
+        BlobArchiveFilePattern  = config.BlobArchiveFilePattern,
+        BlobArchiveAppendDate   = config.BlobArchiveAppendDate,
+        NotifyOnSuccess         = config.NotifyOnSuccess,
+        NotifyOnFileNotFound    = config.NotifyOnFileNotFound,
+        NotifyOnDataIssue       = config.NotifyOnDataIssue,
+        SqlPushEnabled          = config.SqlPushEnabled,
+        SqlTargetTable          = config.SqlTargetTable,
+        SqlColumnMappingJson    = config.SqlColumnMappingJson,
+        UpdatedAt = config.UpdatedAt,
+        UpdatedBy = config.UpdatedBy
+    };
+
+    /// <summary>Returns "••••••••" when a secret is present, or null when empty.</summary>
+    private static string? Mask(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? value : "••••••••";
+}

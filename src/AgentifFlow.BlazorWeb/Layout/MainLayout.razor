@@ -1,0 +1,110 @@
+@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+<MudLayout>
+    <!-- ── Top app bar — authenticated users only ───────────────────────────── -->
+    <AuthorizeView>
+        <Authorized>
+            <MudAppBar Elevation="2" Color="Color.Dark"
+                       Style="background:#213e55 !important; border-bottom:1px solid rgba(255,255,255,0.10);">
+                <MudIconButton Icon="@Icons.Material.Outlined.Menu" Color="Color.Inherit"
+                               Edge="Edge.Start" OnClick="ToggleDrawer"
+                               aria-label="Toggle navigation" />
+
+                <!-- Logo + product name -->
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <img src="logo.png" style="height:34px;width:auto;" alt="AgentifFlow" />
+                </div>
+
+                <MudSpacer />
+                <LoginDisplay />
+            </MudAppBar>
+        </Authorized>
+    </AuthorizeView>
+
+    <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+    <AuthorizeView>
+        <Authorized>
+            <MudDrawer @bind-Open="_drawerOpen" Elevation="0" ClipMode="DrawerClipMode.Always"
+                       Style="background:#213e55; border-right:1px solid rgba(255,255,255,0.10);">
+
+                <div style="padding:20px 16px 8px; border-bottom:1px solid rgba(255,255,255,0.08); margin-bottom:8px;">
+                    <span style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.4);letter-spacing:1.5px;text-transform:uppercase;">
+                        Menu
+                    </span>
+                </div>
+
+                <MudNavMenu Style="padding:0 8px;">
+
+                    <!-- Dashboard — real-time job monitoring -->
+                    <MudNavLink Href="/" Match="NavLinkMatch.All"
+                                Icon="@Icons.Material.Outlined.SpaceDashboard"
+                                Style="border-radius:20px;margin-bottom:4px;color:rgba(255,255,255,0.85);">
+                        Dashboard
+                    </MudNavLink>
+
+                    <!-- Control Tower — agents + skill assignment -->
+                    <MudNavLink Href="/agents" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Outlined.AccountTree"
+                                Style="border-radius:20px;margin-bottom:4px;color:rgba(255,255,255,0.85);">
+                        Control Tower
+                    </MudNavLink>
+
+                    <!-- Integration Settings — Graph API, Blob, SQL, OpenAI config -->
+                    <MudNavLink Href="/configuration" Match="NavLinkMatch.All"
+                                Icon="@Icons.Material.Outlined.Tune"
+                                Style="border-radius:20px;margin-bottom:4px;color:rgba(255,255,255,0.85);">
+                        Integration Settings
+                    </MudNavLink>
+
+                    <!-- Job Monitor — simulate/manage local job runs for demo -->
+                    <MudNavLink Href="/jobmonitor" Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Outlined.MonitorHeart"
+                                Style="border-radius:20px;margin-bottom:4px;color:rgba(255,255,255,0.85);">
+                        Job Monitor
+                    </MudNavLink>
+
+                </MudNavMenu>
+            </MudDrawer>
+        </Authorized>
+    </AuthorizeView>
+
+    <MudMainContent Class="main-content-with-footer">
+        <MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+
+    <!-- ── Footer — fixed to the bottom of the viewport ───────────────────── -->
+    <footer class="app-footer">
+        <div class="app-footer-inner">
+            <img src="logo.png" style="height:20px;width:auto;" alt="AgentifFlow" />
+            <span class="app-footer-text">
+                Powered by <strong>Tech Mahindra Ltd</strong>
+            </span>
+        </div>
+    </footer>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = false;
+
+    protected override void OnInitialized()
+    {
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _drawerOpen = false;
+        StateHasChanged();
+    }
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}

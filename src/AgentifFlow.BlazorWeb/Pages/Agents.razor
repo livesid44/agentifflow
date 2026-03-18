@@ -1,0 +1,917 @@
+@page "/agents"
+@attribute [Authorize]
+@inject IAgentApiService AgentService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Control Tower</PageTitle>
+
+<!-- ── Page header ──────────────────────────────────────────────────────────── -->
+<MudText Typo="Typo.h5" Class="mb-1" Style="font-weight:700; letter-spacing:-0.5px;">
+    <MudIcon Icon="@Icons.Material.Outlined.AccountTree" Class="mr-2" Style="vertical-align:middle;" />
+    Control Tower
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-6" Style="color:var(--mud-palette-text-secondary);">
+    Build intelligent agents by combining <strong>skills</strong>. Each agent runs independently with its own skill configuration.
+</MudText>
+
+<!-- ── Global stats bar ─────────────────────────────────────────────────────── -->
+<MudGrid Spacing="3" Class="mb-6">
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.ManageAccounts" Color="Color.Primary" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_agents.Count</MudText>
+            <MudText Typo="Typo.caption">Total Agents</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.CheckCircle" Color="Color.Success" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_agents.Count(a => a.IsEnabled)</MudText>
+            <MudText Typo="Typo.caption">Active</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.Widgets" Color="Color.Secondary" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_catalogue.Count</MudText>
+            <MudText Typo="Typo.caption">Available Skills</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.ReportProblem" Color="Color.Error" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_agents.Sum(a => a.JobsFailed)</MudText>
+            <MudText Typo="Typo.caption">Jobs Failed</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- SKILLS CATALOGUE                                                            -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<MudText Typo="Typo.h6" Class="mb-3" Style="font-weight:700; letter-spacing:-0.3px;">
+    <MudIcon Icon="@Icons.Material.Outlined.Widgets" Class="mr-2" Style="vertical-align:middle;" />
+    Available Skills
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-4" Style="color:var(--mud-palette-text-secondary);">
+    These four skills are the building blocks. Assign any combination to an agent to define what it can do.
+</MudText>
+
+<MudGrid Spacing="3" Class="mb-8">
+    @foreach (var skill in _catalogue)
+    {
+        var skillColor = SkillColor(skill.Type);
+        <MudItem xs="12" sm="6" lg="3">
+            <MudPaper Elevation="2" Class="pa-4 rounded-lg" Style="@($"border-left:4px solid var(--mud-palette-{SkillColorName(skill.Type)}); height:100%;")">
+                <div class="d-flex align-center gap-2 mb-2">
+                    <MudIcon Icon="@SkillIcon(skill.Type)" Color="@skillColor" Size="Size.Medium" />
+                    <MudText Typo="Typo.subtitle1" Style="font-weight:700;">@skill.DisplayName</MudText>
+                </div>
+                <MudText Typo="Typo.body2" Style="color:var(--mud-palette-text-secondary); font-size:0.82rem;">
+                    @skill.Description
+                </MudText>
+                <MudText Typo="Typo.caption" Class="mt-2 d-block" Style="color:var(--mud-palette-text-disabled);">
+                    Provider: @skill.Provider
+                </MudText>
+                <MudText Typo="Typo.caption" Class="mt-1 d-block" Style="color:var(--mud-palette-text-disabled);">
+                    @AgentsUsingSkill(skill.Type) agent(s) using this skill
+                </MudText>
+            </MudPaper>
+        </MudItem>
+    }
+</MudGrid>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- AGENTS                                                                      -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="d-flex align-center gap-3 mb-4 flex-wrap">
+    <MudText Typo="Typo.h6" Style="font-weight:700; letter-spacing:-0.3px;">
+        <MudIcon Icon="@Icons.Material.Outlined.ManageAccounts" Class="mr-2" Style="vertical-align:middle;" />
+        Agents
+    </MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Outlined.AddCircleOutline"
+               OnClick="OpenCreateDialog">
+        New Agent
+    </MudButton>
+    <MudButton Variant="Variant.Outlined" Color="Color.Default"
+               StartIcon="@Icons.Material.Outlined.Refresh"
+               OnClick="LoadAllAsync"
+               Disabled="@_loading">
+        Refresh
+    </MudButton>
+</div>
+
+@if (_loading)
+{
+    <div class="d-flex justify-center mt-8">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    </div>
+}
+else if (_agents.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">
+        No agents found. Click <strong>New Agent</strong> to create your first agent and assign skills to it.
+    </MudAlert>
+}
+else
+{
+    <MudGrid Spacing="4">
+        @foreach (var agent in _agents)
+        {
+            <MudItem xs="12" sm="6" lg="4">
+                <MudCard Elevation="3" Class="@(agent.IsEnabled ? "agent-card-active" : "agent-card-inactive")" Style="height:100%;">
+                    <MudCardHeader>
+                        <CardHeaderAvatar>
+                            <MudAvatar Color="@(agent.IsEnabled ? Color.Primary : Color.Default)">
+                                <MudIcon Icon="@Icons.Material.Outlined.ManageAccounts" />
+                            </MudAvatar>
+                        </CardHeaderAvatar>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6" Style="font-weight:700;">@agent.Name</MudText>
+                            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
+                                @(agent.BlobContainerName ?? "inherits global container")
+                            </MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudChip T="string" Color="@(agent.IsEnabled ? Color.Success : Color.Default)"
+                                     Size="Size.Small"
+                                     Text="@(agent.IsEnabled ? "Active" : "Disabled")" />
+                            <MudTooltip Text="@($"Polls every {agent.PollingIntervalMinutes} minute{(agent.PollingIntervalMinutes == 1 ? "" : "s")}")">
+                                <MudChip T="string" Icon="@Icons.Material.Outlined.Schedule"
+                                         Color="Color.Default"
+                                         Size="Size.Small"
+                                         Text="@($"{agent.PollingIntervalMinutes}m")" />
+                            </MudTooltip>
+                        </CardHeaderActions>
+                    </MudCardHeader>
+
+                    @if (!string.IsNullOrWhiteSpace(agent.Description))
+                    {
+                        <MudCardContent Class="pt-0 pb-2">
+                            <MudText Typo="Typo.body2" Style="color:var(--mud-palette-text-secondary);">
+                                @agent.Description
+                            </MudText>
+                        </MudCardContent>
+                    }
+
+                    <!-- ── Assigned skills ──────────────────────────────────────── -->
+                    <MudCardContent Class="pt-1 pb-1">
+                        <MudText Typo="Typo.caption" Class="mb-1 d-block" Style="font-weight:600; color:var(--mud-palette-text-secondary);">
+                            SKILLS
+                        </MudText>
+                        @if (agent.Skills.Any(s => s.IsEnabled))
+                        {
+                            <div class="d-flex flex-wrap gap-1">
+                                @foreach (var skill in agent.Skills.Where(s => s.IsEnabled))
+                                {
+                                    <MudChip T="string" Color="@SkillColor(skill.SkillType)"
+                                             Size="Size.Small"
+                                             Icon="@SkillIcon(skill.SkillType)"
+                                             Text="@SkillDisplayName(skill.SkillType)" />
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-disabled); font-style:italic;">
+                                No skills assigned — uses legacy configuration
+                            </MudText>
+                        }
+                    </MudCardContent>
+
+                    <!-- ── Job stat chips ───────────────────────────────────────── -->
+                    <MudCardContent Class="pt-1 pb-2">
+                        <div class="d-flex flex-wrap gap-1 mb-1">
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small"
+                                     Icon="@Icons.Material.Outlined.CheckCircle"
+                                     Text="@($"{agent.JobsCompleted} done")" />
+                            @if (agent.JobsInProgress > 0)
+                            {
+                                <MudChip T="string" Color="Color.Info" Size="Size.Small"
+                                         Icon="@Icons.Material.Outlined.Pending"
+                                         Text="@($"{agent.JobsInProgress} running")" />
+                            }
+                            @if (agent.JobsFailed > 0)
+                            {
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small"
+                                         Icon="@Icons.Material.Outlined.ErrorOutline"
+                                         Text="@($"{agent.JobsFailed} failed")" />
+                            }
+                            @if (agent.JobsAwaitingApproval > 0)
+                            {
+                                <MudChip T="string" Color="Color.Warning" Size="Size.Small"
+                                         Icon="@Icons.Material.Outlined.HourglassEmpty"
+                                         Text="@($"{agent.JobsAwaitingApproval} awaiting")" />
+                            }
+                        </div>
+                        @if (agent.LastActivity.HasValue)
+                        {
+                            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-disabled);">
+                                Last activity: @agent.LastActivity.Value.ToLocalTime().ToString("dd MMM HH:mm")
+                            </MudText>
+                        }
+                    </MudCardContent>
+
+                    <!-- ── File targets ─────────────────────────────────────────── -->
+                    @if (agent.FileTargets.Any())
+                    {
+                        <MudCardContent Class="pt-0 pb-1">
+                            <MudText Typo="Typo.caption" Class="mb-1 d-block" Style="font-weight:600; color:var(--mud-palette-text-secondary);">
+                                FILE TARGETS (@agent.FileTargets.Count)
+                            </MudText>
+                            @foreach (var t in agent.FileTargets.Take(3))
+                            {
+                                <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
+                                    <MudIcon Icon="@(t.IsRequired ? Icons.Material.Outlined.NotificationImportant : Icons.Material.Outlined.InsertDriveFile)"
+                                             Size="Size.Small" Style="vertical-align:middle;" />
+                                    @BuildExpectedName(t)
+                                </MudText>
+                            }
+                            @if (agent.FileTargets.Count > 3)
+                            {
+                                <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-disabled);">
+                                    +@(agent.FileTargets.Count - 3) more…
+                                </MudText>
+                            }
+                        </MudCardContent>
+                    }
+
+                    <!-- ── Actions ──────────────────────────────────── -->
+                    <MudCardActions>
+                        <MudTooltip Text="Manage skills">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Widgets"
+                                           Color="Color.Secondary"
+                                           OnClick="() => OpenSkillsDialog(agent)" />
+                        </MudTooltip>
+                        <MudTooltip Text="Edit agent settings">
+                            <MudIconButton Icon="@Icons.Material.Outlined.EditNote"
+                                           Color="Color.Primary"
+                                           OnClick="() => OpenEditDialog(agent)" />
+                        </MudTooltip>
+                        <MudTooltip Text="@(agent.IsEnabled ? "Disable agent" : "Enable agent")">
+                            <MudIconButton Icon="@(agent.IsEnabled ? Icons.Material.Outlined.PauseCircleOutline : Icons.Material.Outlined.PlayCircleOutline)"
+                                           Color="@(agent.IsEnabled ? Color.Warning : Color.Success)"
+                                           OnClick="() => ToggleEnabledAsync(agent)" />
+                        </MudTooltip>
+                        <MudTooltip Text="Delete agent">
+                            <MudIconButton Icon="@Icons.Material.Outlined.DeleteOutline"
+                                           Color="Color.Error"
+                                           OnClick="() => DeleteAgentAsync(agent)" />
+                        </MudTooltip>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- CREATE / EDIT AGENT DIALOG                                                  -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<MudDialog @bind-Visible="_dialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
+    <TitleContent>
+        <MudIcon Icon="@Icons.Material.Outlined.ManageAccounts" Class="mr-2" Style="vertical-align:middle;" />
+        @(_editingAgent is null ? "New Agent" : $"Edit — {_editingAgent.Name}")
+    </TitleContent>
+    <DialogContent>
+        @if (_form is not null)
+        {
+            <MudTabs Elevation="0" Rounded="false" ApplyEffectsToContainer="true" Class="mt-2">
+
+                <!-- ── Identity tab ────────────────────────────────────────── -->
+                <MudTabPanel Text="Identity">
+                    <MudGrid Spacing="3" Class="mt-2">
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="_form.Name" Label="Agent Name" Required="true"
+                                          Variant="Variant.Outlined" FullWidth="true"
+                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.ManageAccounts" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="_form.Description" Label="Description" Lines="2"
+                                          Variant="Variant.Outlined" FullWidth="true" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="_form.BlobContainerName" Label="Blob Container (optional)"
+                                          Placeholder="inherits global setting" Variant="Variant.Outlined" FullWidth="true"
+                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.CloudQueue" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6" Class="d-flex align-center">
+                            <MudSwitch @bind-Value="_form.IsEnabled" Color="Color.Primary" Label="Agent Enabled" />
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- ── File Targets tab ────────────────────────────────────── -->
+                <MudTabPanel Text="File Targets">
+                    <div class="d-flex align-center justify-space-between mb-3 mt-2">
+                        <MudText Typo="Typo.subtitle2" Style="font-weight:600;">
+                            Files to watch each poll cycle
+                        </MudText>
+                        <MudButton StartIcon="@Icons.Material.Outlined.AddCircleOutline" Color="Color.Primary"
+                                   Variant="Variant.Outlined" Size="Size.Small" OnClick="AddFileTarget">
+                            Add Target
+                        </MudButton>
+                    </div>
+                    @for (int i = 0; i < _form.FileTargets.Count; i++)
+                    {
+                        var idx = i;
+                        var target = _form.FileTargets[idx];
+                        <MudPaper Elevation="1" Class="pa-3 mb-2 rounded-lg">
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" sm="5">
+                                    <MudTextField @bind-Value="target.FilePattern" Label="File Pattern"
+                                                  Placeholder="e.g. daily_report" Variant="Variant.Outlined" />
+                                </MudItem>
+                                <MudItem xs="6" sm="2" Class="d-flex align-center">
+                                    <MudSwitch @bind-Value="target.AppendDate" Color="Color.Secondary"
+                                               Label="Date" />
+                                </MudItem>
+                                <MudItem xs="6" sm="2" Class="d-flex align-center">
+                                    <MudSwitch @bind-Value="target.IsRequired" Color="Color.Warning"
+                                               Label="Required" />
+                                </MudItem>
+                                <MudItem xs="12" sm="2">
+                                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
+                                        @BuildPreview(target)
+                                    </MudText>
+                                </MudItem>
+                                <MudItem xs="12" sm="1" Class="d-flex justify-end">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.RemoveCircleOutline" Color="Color.Error"
+                                                   Size="Size.Small" OnClick="() => RemoveFileTarget(idx)" />
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
+                    }
+                    @if (_form.FileTargets.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true">
+                            No file targets — the agent will use any file found in the container.
+                        </MudAlert>
+                    }
+                </MudTabPanel>
+
+                <!-- ── Notifications tab ───────────────────────────────────── -->
+                <MudTabPanel Text="Notifications">
+                    <MudGrid Spacing="3" Class="mt-2">
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="_form.NotificationEmail" Label="Notification Email"
+                                          InputType="InputType.Email" Variant="Variant.Outlined" FullWidth="true"
+                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Email" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4" Class="d-flex align-center">
+                            <MudSwitch @bind-Value="_form.NotifyOnSuccess"      Color="Color.Success"  Label="On Success" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4" Class="d-flex align-center">
+                            <MudSwitch @bind-Value="_form.NotifyOnFileNotFound" Color="Color.Warning"  Label="File Not Found" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4" Class="d-flex align-center">
+                            <MudSwitch @bind-Value="_form.NotifyOnDataIssue"    Color="Color.Error"    Label="Data Issue" />
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- ── Advanced tab ────────────────────────────────────────── -->
+                <MudTabPanel Text="Advanced">
+                    <MudGrid Spacing="3" Class="mt-2">
+                        <MudItem xs="12" sm="6">
+                            <MudNumericField @bind-Value="_form.MaxRetryCount" Label="Max Retry Count"
+                                             Min="0" Max="100" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudNumericField @bind-Value="_form.AutoRetryIntervalMinutes" Label="Retry Interval (min)"
+                                             Min="0" Max="1440" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudNumericField @bind-Value="_form.PollingIntervalMinutes" Label="Schedule Frequency (min)"
+                                             Min="1" Max="1440" Variant="Variant.Outlined"
+                                             HelperText="How often the agent polls for new files/events (default: 5 min)" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="_form.BlobArchiveFilePattern" Label="Archive File Pattern"
+                                          Placeholder="e.g. archive/daily_report" Variant="Variant.Outlined" FullWidth="true"
+                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Inventory2" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4" Class="d-flex align-center">
+                            <MudSwitch @bind-Value="_form.BlobArchiveAppendDate" Color="Color.Secondary" Label="Append Date to Archive" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudDivider Class="my-2" />
+                            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
+                                SQL settings are configured via the <strong>Skills</strong> tab after saving the agent.
+                            </MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+            </MudTabs>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="() => _dialogOpen = false">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAgentAsync" Disabled="@_saving">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            @(_editingAgent is null ? "Create Agent" : "Save Changes")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- MANAGE SKILLS DIALOG                                                         -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<MudDialog @bind-Visible="_skillsDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
+    <TitleContent>
+        <MudIcon Icon="@Icons.Material.Outlined.Widgets" Class="mr-2" Style="vertical-align:middle;" />
+        Skills — @(_skillsAgent?.Name)
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-4" Style="color:var(--mud-palette-text-secondary);">
+            Toggle skills for this agent. Skills with a gear icon have additional configuration options.
+        </MudText>
+        @foreach (var entry in _skillDraft)
+        {
+            var info = _catalogue.FirstOrDefault(c => c.Type == entry.SkillType);
+            var skillColor = SkillColor(entry.SkillType);
+            <MudPaper Elevation="1" Class="pa-3 mb-3 rounded-lg">
+                <!-- Skill header row -->
+                <div class="d-flex align-center gap-3">
+                    <MudIcon Icon="@SkillIcon(entry.SkillType)" Color="@skillColor" />
+                    <div class="flex-grow-1">
+                        <MudText Typo="Typo.subtitle2" Style="font-weight:600;">@(info?.DisplayName ?? entry.SkillType)</MudText>
+                        <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary);">
+                            @(info?.Description ?? "")
+                        </MudText>
+                    </div>
+                    <MudSwitch @bind-Value="entry.IsEnabled" Color="@skillColor" />
+                </div>
+
+                <!-- ThirdPartyApiIntegration configuration panel -->
+                @if (entry.SkillType == "ThirdPartyApiIntegration" && entry.IsEnabled)
+                {
+                    var cfg = entry.ApiConfig ??= new ThirdPartyApiConfig();
+                    <MudDivider Class="my-3" />
+                    <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="font-weight:600; color:var(--mud-palette-text-secondary);">
+                        <MudIcon Icon="@Icons.Material.Outlined.Settings" Size="Size.Small" Class="mr-1" />API Configuration
+                    </MudText>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="cfg.EndpointUrl" Label="Endpoint URL"
+                                          Placeholder="https://your-host/api/jobmonitor/status"
+                                          Variant="Variant.Outlined" FullWidth="true" Dense="true"
+                                          HelperText="URL to poll each cycle. Use the built-in /api/jobmonitor/status for local testing." />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudSelect @bind-Value="cfg.RequestMethod" Label="Method"
+                                       Variant="Variant.Outlined" Dense="true" FullWidth="true">
+                                <MudSelectItem Value="@("GET")">GET</MudSelectItem>
+                                <MudSelectItem Value="@("POST")">POST</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudSelect @bind-Value="cfg.AuthType" Label="Auth Type"
+                                       Variant="Variant.Outlined" Dense="true" FullWidth="true">
+                                <MudSelectItem Value="@("None")">None</MudSelectItem>
+                                <MudSelectItem Value="@("Bearer")">Bearer Token</MudSelectItem>
+                                <MudSelectItem Value="@("ApiKey")">API Key Header</MudSelectItem>
+                                <MudSelectItem Value="@("Basic")">Basic (Base64)</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        @if (cfg.AuthType != "None")
+                        {
+                            @if (cfg.AuthType == "ApiKey")
+                            {
+                                <MudItem xs="4">
+                                    <MudTextField @bind-Value="cfg.AuthHeaderName" Label="Header Name"
+                                                  Placeholder="X-API-Key" Variant="Variant.Outlined" Dense="true" FullWidth="true" />
+                                </MudItem>
+                                <MudItem xs="8">
+                                    <MudTextField @bind-Value="cfg.AuthToken" Label="API Key Value"
+                                                  InputType="InputType.Password" Variant="Variant.Outlined" Dense="true" FullWidth="true" />
+                                </MudItem>
+                            }
+                            else
+                            {
+                                <MudItem xs="12">
+                                    <MudTextField @bind-Value="cfg.AuthToken" Label="Token / Credentials"
+                                                  InputType="InputType.Password" Variant="Variant.Outlined" Dense="true" FullWidth="true" />
+                                </MudItem>
+                            }
+                        }
+                        @if (cfg.RequestMethod == "POST")
+                        {
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="cfg.RequestPayloadTemplate" Label="Request Payload (JSON)"
+                                              Lines="3" Variant="Variant.Outlined" Dense="true" FullWidth="true"
+                                              Placeholder="{}" />
+                            </MudItem>
+                        }
+                        <MudItem xs="6">
+                            <MudTextField @bind-Value="cfg.SuccessIndicator" Label="Success Indicator (optional)"
+                                          Placeholder='e.g. "hasFailed":false' Variant="Variant.Outlined" Dense="true" FullWidth="true"
+                                          HelperText="Substring that must appear in the response to count as success." />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudTextField @bind-Value="cfg.FailureIndicator" Label="Failure Indicator"
+                                          Placeholder='e.g. "hasFailed":true' Variant="Variant.Outlined" Dense="true" FullWidth="true"
+                                          HelperText="Substring in the response that triggers the failure workflow." />
+                        </MudItem>
+                    </MudGrid>
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2" Icon="@Icons.Material.Outlined.Lightbulb">
+                        <strong>Local testing:</strong> Set Endpoint URL to <code>/api/jobmonitor/status</code> (relative) and Failure Indicator to <code>"hasFailed":true</code>. Use the <strong>Job Monitor</strong> page to simulate failures.
+                    </MudAlert>
+                }
+
+                <!-- SqlManagement configuration panel -->
+                @if (entry.SkillType == "SqlManagement" && entry.IsEnabled)
+                {
+                    <MudDivider Class="my-3" />
+                    <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="font-weight:600; color:var(--mud-palette-text-secondary);">
+                        <MudIcon Icon="@Icons.Material.Outlined.TableChart" Size="Size.Small" Class="mr-1" />SQL Target Table
+                    </MudText>
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2" Icon="@Icons.Material.Outlined.Info">
+                        The SQL target table and column mapping are set in the agent's <strong>Settings</strong> tab.
+                        Use the button below to copy a ready-to-run <code>CREATE TABLE</code> script for your SQL Server instance.
+                    </MudAlert>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Outlined.ContentCopy"
+                               OnClick="() => CopySqlScriptAsync(_skillsAgent!)">
+                        Copy SQL Script
+                    </MudButton>
+                }
+
+                <!-- LogAnalysis configuration panel -->
+                @if (entry.SkillType == "LogAnalysis" && entry.IsEnabled)
+                {
+                    var lcfg = entry.LogConfig ??= new LogAnalysisConfig();
+                    <MudDivider Class="my-3" />
+                    <MudText Typo="Typo.caption" Class="mb-2 d-block" Style="font-weight:600; color:var(--mud-palette-text-secondary);">
+                        <MudIcon Icon="@Icons.Material.Outlined.Settings" Size="Size.Small" Class="mr-1" />Log Analysis Configuration
+                    </MudText>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="8">
+                            <MudTextField @bind-Value="lcfg.PocEmail" Label="POC Email (Data Owner)"
+                                          Placeholder="vendor@example.com" Variant="Variant.Outlined" Dense="true" FullWidth="true"
+                                          HelperText="Correction email is sent here after human approval." />
+                        </MudItem>
+                        <MudItem xs="4">
+                            <MudTextField @bind-Value="lcfg.PocName" Label="POC Name"
+                                          Placeholder="Data Team" Variant="Variant.Outlined" Dense="true" FullWidth="true" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="lcfg.AnalysisPrompt" Label="Custom Analysis Prompt (optional)"
+                                          Lines="3" Variant="Variant.Outlined" Dense="true" FullWidth="true"
+                                          Placeholder="Leave blank to use the default prompt that focuses on file naming mismatches." />
+                        </MudItem>
+                    </MudGrid>
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2" Icon="@Icons.Material.Outlined.AccountTree">
+                        <strong>Workflow:</strong> On failure → AI analyses logs → operator confirms → system asks to send correction email → email sent to POC.
+                    </MudAlert>
+                }
+            </MudPaper>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="() => _skillsDialogOpen = false">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="SaveSkillsAsync" Disabled="@_savingSkills">
+            @if (_savingSkills) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Save Skills
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    private bool _loading = true;
+    private List<AgentDto>          _agents    = [];
+    private List<SkillCatalogueDto> _catalogue = [];
+
+    // Agent create/edit dialog
+    private bool _dialogOpen = false;
+    private bool _saving     = false;
+    private AgentDto? _editingAgent;
+    private CreateAgentRequest? _form;
+
+    // Skills dialog
+    private bool _skillsDialogOpen = false;
+    private bool _savingSkills     = false;
+    private AgentDto? _skillsAgent;
+    private List<SkillDraftEntry> _skillDraft = [];
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+        => await LoadAllAsync();
+
+    private async Task LoadAllAsync()
+    {
+        _loading = true;
+        try
+        {
+            var agentsTask    = AgentService.GetAllAsync();
+            var catalogueTask = AgentService.GetSkillCatalogueAsync();
+            await Task.WhenAll(agentsTask, catalogueTask);
+            _agents    = agentsTask.Result;
+            _catalogue = catalogueTask.Result;
+        }
+        catch { Snackbar.Add("Failed to load agents.", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    // ── Skill catalogue helpers ───────────────────────────────────────────────
+
+    private static Color SkillColor(string skillType) => skillType switch
+    {
+        "EmailMonitoring"          => Color.Info,
+        "FileMonitoring"           => Color.Primary,
+        "DataValidation"           => Color.Warning,
+        "SqlManagement"            => Color.Secondary,
+        "ThirdPartyApiIntegration" => Color.Tertiary,
+        "LogAnalysis"              => Color.Success,
+        _                          => Color.Default,
+    };
+
+    private static string SkillColorName(string skillType) => skillType switch
+    {
+        "EmailMonitoring"          => "info",
+        "FileMonitoring"           => "primary",
+        "DataValidation"           => "warning",
+        "SqlManagement"            => "secondary",
+        "ThirdPartyApiIntegration" => "tertiary",
+        "LogAnalysis"              => "success",
+        _                          => "default",
+    };
+
+    private static string SkillIcon(string skillType) => skillType switch
+    {
+        "EmailMonitoring"          => Icons.Material.Outlined.MarkEmailUnread,
+        "FileMonitoring"           => Icons.Material.Outlined.FolderOpen,
+        "DataValidation"           => Icons.Material.Outlined.FactCheck,
+        "SqlManagement"            => Icons.Material.Outlined.TableChart,
+        "ThirdPartyApiIntegration" => Icons.Material.Outlined.IntegrationInstructions,
+        "LogAnalysis"              => Icons.Material.Outlined.Analytics,
+        _                          => Icons.Material.Outlined.Widgets,
+    };
+
+    private static string SkillDisplayName(string skillType) => skillType switch
+    {
+        "EmailMonitoring"          => "Email Mon.",
+        "FileMonitoring"           => "File Mon.",
+        "DataValidation"           => "Data Valid.",
+        "SqlManagement"            => "SQL Mgmt",
+        "ThirdPartyApiIntegration" => "3rd Party API",
+        "LogAnalysis"              => "Log Analysis",
+        _                          => skillType,
+    };
+
+    private int AgentsUsingSkill(string skillType)
+        => _agents.Count(a => a.Skills.Any(s => s.SkillType == skillType && s.IsEnabled));
+
+    // ── Skills dialog ─────────────────────────────────────────────────────────
+
+    private void OpenSkillsDialog(AgentDto agent)
+    {
+        _skillsAgent = agent;
+
+        // Build draft: one entry per catalogue skill, pre-populated from agent's existing skills.
+        _skillDraft = _catalogue.Select(c =>
+        {
+            var existing = agent.Skills.FirstOrDefault(s => s.SkillType == c.Type);
+            var entry = new SkillDraftEntry
+            {
+                SkillType  = c.Type,
+                IsEnabled  = existing?.IsEnabled ?? false,
+                ConfigJson = existing?.ConfigJson,
+            };
+
+            // Parse config into typed objects for form binding
+            if (!string.IsNullOrWhiteSpace(entry.ConfigJson))
+            {
+                try
+                {
+                    var opts = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    if (c.Type == "ThirdPartyApiIntegration")
+                        entry.ApiConfig = System.Text.Json.JsonSerializer.Deserialize<ThirdPartyApiConfig>(entry.ConfigJson, opts);
+                    else if (c.Type == "LogAnalysis")
+                        entry.LogConfig = System.Text.Json.JsonSerializer.Deserialize<LogAnalysisConfig>(entry.ConfigJson, opts);
+                }
+                catch { /* leave null, form will start from defaults */ }
+            }
+
+            return entry;
+        }).ToList();
+
+        _skillsDialogOpen = true;
+    }
+
+    private async Task SaveSkillsAsync()
+    {
+        if (_skillsAgent is null) return;
+        _savingSkills = true;
+        try
+        {
+            var opts = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+            };
+
+            // Serialize typed config objects back to ConfigJson before sending
+            foreach (var entry in _skillDraft)
+            {
+                if (entry.SkillType == "ThirdPartyApiIntegration" && entry.ApiConfig is not null)
+                    entry.ConfigJson = System.Text.Json.JsonSerializer.Serialize(entry.ApiConfig, opts);
+                else if (entry.SkillType == "LogAnalysis" && entry.LogConfig is not null)
+                    entry.ConfigJson = System.Text.Json.JsonSerializer.Serialize(entry.LogConfig, opts);
+            }
+
+            var request = new SetSkillsRequest
+            {
+                Skills = _skillDraft.Select(e => new AgentSkillEntry
+                {
+                    SkillType  = e.SkillType,
+                    IsEnabled  = e.IsEnabled,
+                    ConfigJson = e.ConfigJson,
+                }).ToList(),
+            };
+
+            var result = await AgentService.SetSkillsAsync(_skillsAgent.Id, request);
+            if (result is not null)
+            {
+                Snackbar.Add($"Skills updated for '{_skillsAgent.Name}'.", Severity.Success);
+                _skillsDialogOpen = false;
+                await LoadAllAsync();
+            }
+            else Snackbar.Add("Failed to save skills.", Severity.Error);
+        }
+        finally { _savingSkills = false; }
+    }
+
+    private async Task CopySqlScriptAsync(AgentDto agent)
+    {
+        try
+        {
+            var script = await AgentService.GetSqlScriptAsync(agent.Id);
+            if (string.IsNullOrWhiteSpace(script))
+            {
+                Snackbar.Add("Could not generate SQL script.", Severity.Warning);
+                return;
+            }
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", script);
+            Snackbar.Add("SQL script copied to clipboard.", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Failed to copy SQL script. Check browser clipboard permissions.", Severity.Warning);
+        }
+    }
+
+    // ── Agent create/edit dialog ──────────────────────────────────────────────
+
+    private void OpenCreateDialog()
+    {
+        _editingAgent = null;
+        _form = new CreateAgentRequest();
+        _dialogOpen = true;
+    }
+
+    private void OpenEditDialog(AgentDto agent)
+    {
+        _editingAgent = agent;
+        _form = new CreateAgentRequest
+        {
+            Name                     = agent.Name,
+            Description              = agent.Description,
+            IsEnabled                = agent.IsEnabled,
+            BlobContainerName        = agent.BlobContainerName,
+            NotificationEmail        = agent.NotificationEmail,
+            NotifyOnSuccess          = agent.NotifyOnSuccess,
+            NotifyOnFileNotFound     = agent.NotifyOnFileNotFound,
+            NotifyOnDataIssue        = agent.NotifyOnDataIssue,
+            MaxRetryCount            = agent.MaxRetryCount,
+            AutoRetryIntervalMinutes = agent.AutoRetryIntervalMinutes,
+            PollingIntervalMinutes   = agent.PollingIntervalMinutes,
+            SqlPushEnabled           = agent.SqlPushEnabled,
+            SqlTargetTable           = agent.SqlTargetTable,
+            SqlColumnMappingJson     = agent.SqlColumnMappingJson,
+            BlobArchiveFilePattern   = agent.BlobArchiveFilePattern,
+            BlobArchiveAppendDate    = agent.BlobArchiveAppendDate,
+            FileTargets = agent.FileTargets.Select(t => new AgentFileTargetRequest
+            {
+                FilePattern = t.FilePattern,
+                AppendDate  = t.AppendDate,
+                IsRequired  = t.IsRequired,
+            }).ToList(),
+        };
+        _dialogOpen = true;
+    }
+
+    private async Task SaveAgentAsync()
+    {
+        if (_form is null) return;
+        _saving = true;
+        try
+        {
+            if (_editingAgent is null)
+            {
+                var created = await AgentService.CreateAsync(_form);
+                if (created is not null)
+                {
+                    Snackbar.Add($"Agent '{created.Name}' created. Assign skills to configure its capabilities.", Severity.Success);
+                    _dialogOpen = false;
+                    await LoadAllAsync();
+                }
+                else Snackbar.Add("Failed to create agent.", Severity.Error);
+            }
+            else
+            {
+                var updated = await AgentService.UpdateAsync(_editingAgent.Id, new UpdateAgentRequest
+                {
+                    Name                     = _form.Name,
+                    Description              = _form.Description,
+                    IsEnabled                = _form.IsEnabled,
+                    BlobContainerName        = _form.BlobContainerName ?? "",
+                    NotificationEmail        = _form.NotificationEmail ?? "",
+                    NotifyOnSuccess          = _form.NotifyOnSuccess,
+                    NotifyOnFileNotFound     = _form.NotifyOnFileNotFound,
+                    NotifyOnDataIssue        = _form.NotifyOnDataIssue,
+                    MaxRetryCount            = _form.MaxRetryCount,
+                    AutoRetryIntervalMinutes = _form.AutoRetryIntervalMinutes,
+                    PollingIntervalMinutes   = _form.PollingIntervalMinutes,
+                    SqlPushEnabled           = _form.SqlPushEnabled,
+                    SqlTargetTable           = _form.SqlTargetTable ?? "",
+                    BlobArchiveFilePattern   = _form.BlobArchiveFilePattern ?? "",
+                    BlobArchiveAppendDate    = _form.BlobArchiveAppendDate,
+                    FileTargets              = _form.FileTargets,
+                });
+                if (updated is not null)
+                {
+                    Snackbar.Add($"Agent '{updated.Name}' saved.", Severity.Success);
+                    _dialogOpen = false;
+                    await LoadAllAsync();
+                }
+                else Snackbar.Add("Failed to save agent.", Severity.Error);
+            }
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task ToggleEnabledAsync(AgentDto agent)
+    {
+        var updated = await AgentService.SetEnabledAsync(agent.Id, !agent.IsEnabled);
+        if (updated is not null)
+        {
+            Snackbar.Add($"Agent '{agent.Name}' {(updated.IsEnabled ? "enabled" : "disabled")}.", Severity.Success);
+            await LoadAllAsync();
+        }
+        else Snackbar.Add("Failed to update agent status.", Severity.Error);
+    }
+
+    private async Task DeleteAgentAsync(AgentDto agent)
+    {
+        var confirm = await JS.InvokeAsync<bool>("confirm",
+            $"Permanently delete agent '{agent.Name}'? This cannot be undone.");
+        if (!confirm) return;
+
+        var ok = await AgentService.DeleteAsync(agent.Id);
+        if (ok)
+        {
+            Snackbar.Add($"Agent '{agent.Name}' deleted.", Severity.Success);
+            await LoadAllAsync();
+        }
+        else Snackbar.Add("Failed to delete agent.", Severity.Error);
+    }
+
+    private void AddFileTarget()
+        => _form?.FileTargets.Add(new AgentFileTargetRequest());
+
+    private void RemoveFileTarget(int idx)
+        => _form?.FileTargets.RemoveAt(idx);
+
+    private static string BuildPreview(AgentFileTargetRequest t)
+    {
+        if (string.IsNullOrWhiteSpace(t.FilePattern)) return "";
+        var baseName = t.FilePattern.TrimEnd('_');
+        return t.AppendDate ? $"{baseName}_yyyyMMdd.csv" : $"{baseName}.csv";
+    }
+
+    private static string BuildExpectedName(AgentFileTargetDto t)
+    {
+        var baseName = t.FilePattern.TrimEnd('_');
+        return t.AppendDate ? $"{baseName}_{DateTime.UtcNow:yyyyMMdd}.csv" : $"{baseName}.csv";
+    }
+
+    // ── Inner types ───────────────────────────────────────────────────────────
+
+    private sealed class SkillDraftEntry
+    {
+        public string  SkillType  { get; set; } = string.Empty;
+        public bool    IsEnabled  { get; set; }
+        public string? ConfigJson { get; set; }
+
+        // Parsed config objects for the form (lazily initialised)
+        public ThirdPartyApiConfig? ApiConfig { get; set; }
+        public LogAnalysisConfig?   LogConfig { get; set; }
+    }
+}

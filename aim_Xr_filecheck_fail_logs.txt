@@ -1,0 +1,34 @@
+04-03-2026 00:08:56 PST QC-871_spark INFO - dir_path: /usr/lib/ZDH/hub/spark_engine/file_validation_framework
+04-03-2026 00:08:56 PST QC-871_spark INFO - Logger file path: /usr/lib/ZDH/hub/spark_engine/file_validation_framework/validation_file_871.log
+04-03-2026 00:08:56 PST QC-871_spark INFO - ==== File Validation Script Execution Started ====
+04-03-2026 00:08:56 PST QC-871_spark INFO - ==== File validation started for ['871'] IDs ====
+04-03-2026 00:08:56 PST QC-871_spark INFO - ==== Execution started for ID: 871 ====
+04-03-2026 00:09:02 PST QC-871_spark INFO - ==== Running checks for File Name: 344_bi_nerandomilast_targets_([0-9]{8})_([0-9]{8})_diseases and Match type: regex, Path Type: static ====
+04-03-2026 00:09:02 PST QC-871_spark INFO - s3 sftp
+04-03-2026 00:09:02 PST QC-871_spark INFO - AIM_XR/Ecosystem/
+04-03-2026 00:09:02 PST QC-871_spark INFO - AIM_XR/Ecosystem/344_bi_jascayd_nontargets_20260301_20260301_control.txt
+04-03-2026 00:09:02 PST QC-871_spark INFO - AIM_XR/Ecosystem/344_bi_jascayd_nontargets_20260301_20260301_diseases.txt
+04-03-2026 00:09:02 PST QC-871_spark INFO - AIM_XR/Ecosystem/344_bi_jascayd_nontargets_20260301_20260301_events.txt
+04-03-2026 00:09:02 PST QC-871_spark INFO - AIM_XR/Ecosystem/344_bi_jascayd_nontargets_20260301_20260301_topics.txt
+04-03-2026 00:09:02 PST QC-871_spark INFO - AIM_XR/Ecosystem/344_bi_jascayd_targets_20260301_20260301_control.txt
+04-03-2026 00:09:02 PST QC-871_spark INFO - AIM_XR/Ecosystem/344_bi_jascayd_targets_20260301_20260301_diseases.txt
+04-03-2026 00:09:02 PST QC-871_spark INFO - AIM_XR/Ecosystem/344_bi_jascayd_targets_20260301_20260301_events.txt
+04-03-2026 00:09:02 PST QC-871_spark INFO - AIM_XR/Ecosystem/344_bi_jascayd_targets_20260301_20260301_topics.txt
+04-03-2026 00:09:02 PST QC-871_spark INFO - ==== Total Files Processed : 0 ====
+04-03-2026 00:09:02 PST QC-871_spark INFO - ==== No data found. Please check config file and input params ====
+04-03-2026 00:09:03 PST QC-871_spark INFO - *** File Validation Script Execution Failed. Please check logs ***
+04-03-2026 00:09:03 PST QC-871_spark INFO - Traceback (most recent call last):
+04-03-2026 00:09:03 PST QC-871_spark INFO -   File "/usr/lib/ZDH/hub/spark_engine/file_validation_framework/file_validation.py", line 797, in <module>
+04-03-2026 00:09:03 PST QC-871_spark INFO -     df_mail, file_count = process_request()
+04-03-2026 00:09:03 PST QC-871_spark INFO -   File "/usr/lib/ZDH/hub/spark_engine/file_validation_framework/file_validation.py", line 665, in process_request
+04-03-2026 00:09:03 PST QC-871_spark INFO -     raise Exception("Data not found")
+04-03-2026 00:09:03 PST QC-871_spark INFO - Exception: Data not found
+04-03-2026 00:09:03 PST QC-871_spark INFO - 
+04-03-2026 00:09:03 PST QC-871_spark INFO - During handling of the above exception, another exception occurred:
+04-03-2026 00:09:03 PST QC-871_spark INFO - 
+04-03-2026 00:09:03 PST QC-871_spark INFO - Traceback (most recent call last):
+04-03-2026 00:09:03 PST QC-871_spark INFO -   File "/usr/lib/ZDH/hub/spark_engine/file_validation_framework/file_validation.py", line 1319, in <module>
+04-03-2026 00:09:03 PST QC-871_spark INFO -     raise Exception
+04-03-2026 00:09:03 PST QC-871_spark INFO - Exception
+04-03-2026 00:09:04 PST QC-871_spark INFO - Process completed unsuccessfully in 59 seconds.
+04-03-2026 00:09:04 PST QC-871_spark ERROR - Job run failed!

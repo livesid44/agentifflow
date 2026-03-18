@@ -1,0 +1,24 @@
+@page "/authentication/{action}"
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject IConfiguration Config
+@inject NavigationManager Navigation
+
+@* In dev mode MSAL is not registered, so MSAL callback routes are unused.
+   Redirect to root to avoid DI errors from RemoteAuthenticatorView. *@
+@if (!_useDevLogin)
+{
+    <RemoteAuthenticatorView Action="@Action" />
+}
+
+@code {
+    [Parameter] public string? Action { get; set; }
+
+    private bool _useDevLogin;
+
+    protected override void OnInitialized()
+    {
+        _useDevLogin = Config.GetValue<bool>("ApiConfig:EnableDevLogin");
+        if (_useDevLogin)
+            Navigation.NavigateTo("/", replace: true);
+    }
+}

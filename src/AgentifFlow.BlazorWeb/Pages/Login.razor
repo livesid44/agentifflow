@@ -1,0 +1,166 @@
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject NavigationManager Navigation
+@inject IConfiguration Config
+@inject IServiceProvider Services
+@inject ISnackbar Snackbar
+
+<div class="login-page-split">
+
+    <!-- ── Left: Hero Image Panel ───────────────────────────────────────────── -->
+    <div class="login-hero-panel">
+        <img src="loginbg.png" alt="" class="login-hero-img" aria-hidden="true" />
+
+    </div>
+
+
+    <!-- ── Right: Dark Form Panel ───────────────────────────────────────────── -->
+    <div class="login-form-panel-dark">
+
+        <!-- Top-right corner logo -->
+        <div class="lp-corner-logo">
+            <img src="logo.png" style="height:34px;width:auto;" alt="Logo" />
+        </div>
+
+        <!-- Body -->
+        <div class="lp-form-body">
+
+            <!-- Mobile-only logo -->
+            <div class="lp-mob-logo">
+                <img src="logo.png" style="height:40px;width:auto;" alt="Logo" />
+            </div>
+            <h1 class="lp-heading">
+                Tech M Orion <span class="lp-red">Marketplace</span>
+            </h1>
+            <p class="lp-sub">AI Workflow Platform</p>
+            <p class="lp-tagline">Agentify your Business</p>
+
+            <hr class="lp-hr"/>
+
+            @if (_useDevLogin)
+            {
+                <!-- Dev mode warning -->
+                <div class="lp-dev-warn">
+                    <strong>Developer mode</strong> — local credentials only. Not for production.
+                </div>
+
+                <input type="text" class="lp-input" placeholder="Username"
+                       @bind="@_username" @bind:event="oninput" />
+                <input type="password" class="lp-input" placeholder="Password"
+                       @bind="@_password" @bind:event="oninput"
+                       @onkeydown="HandleKeyDown" />
+
+                <button class="btn-lp-red" @onclick="DevLogin" disabled="@_logging">
+                    @if (_logging)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true"
+                                             Color="Color.Inherit" Class="me-2"/>
+                        <span>Signing in…</span>
+                    }
+                    else
+                    {
+                        <span>Login Now</span>
+                    }
+                </button>
+
+                <p class="lp-dev-note">
+                    Configure credentials in <code>appsettings.json → DevAuth</code>
+                </p>
+            }
+            else
+            {
+                <p class="lp-already">Already signed up?</p>
+                <button class="btn-lp-red" @onclick="SignIn">
+                    <svg width="20" height="20" viewBox="0 0 21 21" aria-hidden="true">
+                        <rect x="1"  y="1"  width="9" height="9" fill="#f25022"/>
+                        <rect x="11" y="1"  width="9" height="9" fill="#7fba00"/>
+                        <rect x="1"  y="11" width="9" height="9" fill="#00a4ef"/>
+                        <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+                    </svg>
+                    Login Now
+                </button>
+
+                <div class="lp-or-row">OR</div>
+
+                <h3 class="lp-create-h">New to Tech M Orion Marketplace?</h3>
+                <p class="lp-create-p">
+                    We're glad you're here.<br/>
+                    Contact your Azure AD administrator to provision your account.
+                </p>
+
+                <p class="lp-secure">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                    </svg>
+                    Secured by Azure Active Directory OAuth 2.0
+                </p>
+            }
+
+        </div>
+
+        <!-- Footer -->
+        <div class="lp-form-footer">
+            <p class="lp-footer-p">
+                <strong>If your company is not onboarded yet,<br/>
+                please reach out to your sales team.</strong>
+            </p>
+            <button class="btn-lp-outline">Request Access</button>
+        </div>
+
+    </div>
+
+</div>
+
+@code {
+    private bool   _useDevLogin;
+    private string _username = "";
+    private string _password = "";
+    private bool   _logging;
+
+    protected override void OnInitialized()
+    {
+        _useDevLogin = Config.GetValue<bool>("ApiConfig:EnableDevLogin");
+    }
+
+    // ── OAuth2 sign-in ────────────────────────────────────────────────────────
+    private void SignIn() => Navigation.NavigateToLogin("authentication/login");
+
+    // ── Dev local sign-in ─────────────────────────────────────────────────────
+    private async Task DevLogin()
+    {
+        if (string.IsNullOrWhiteSpace(_username) || string.IsNullOrWhiteSpace(_password))
+        {
+            Snackbar.Add("Please enter both username and password.", Severity.Warning);
+            return;
+        }
+
+        _logging = true;
+        try
+        {
+            var authSvc = Services.GetRequiredService<ILocalAuthApiService>();
+            var result  = await authSvc.LoginAsync(_username, _password);
+            if (result is null)
+            {
+                Snackbar.Add(
+                    "Invalid credentials. Verify DevAuth settings in appsettings.json.",
+                    Severity.Error);
+                return;
+            }
+
+            var provider = Services.GetRequiredService<LocalAuthStateProvider>();
+            await provider.LoginAsync(result.Token);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Login failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _logging = false;
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await DevLogin();
+    }
+}

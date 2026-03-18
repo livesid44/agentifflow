@@ -1,0 +1,293 @@
+@page "/jobmonitor"
+@attribute [Authorize]
+@inject IJobMonitorApiService JobMonitorService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Job Monitor</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-1" Style="font-weight:700; letter-spacing:-0.5px;">
+    <MudIcon Icon="@Icons.Material.Outlined.MonitorHeart" Class="mr-2" Style="vertical-align:middle;" />
+    Job Monitor
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-6" Style="color:var(--mud-palette-text-secondary);">
+    Simulate and manage local job runs. Agents with the <strong>3rd Party Integration</strong> skill
+    can poll <code>GET /api/jobmonitor/status</code> to detect failures and trigger the
+    <strong>Log Analysis</strong> workflow.
+</MudText>
+
+<!-- ── Status banner ──────────────────────────────────────────────────────── -->
+@if (_status is not null)
+{
+    <MudAlert Severity="@(_status.HasFailed ? Severity.Error : Severity.Success)"
+              Class="mb-6" Icon="@(_status.HasFailed ? Icons.Material.Outlined.ErrorOutline : Icons.Material.Outlined.CheckCircleOutline)">
+        <strong>@_status.Message</strong>
+        &nbsp;·&nbsp; Total: @_status.TotalCount &nbsp;·&nbsp; Running: @_status.RunningCount &nbsp;·&nbsp; Failed: @_status.FailedCount
+    </MudAlert>
+}
+
+<!-- ── Toolbar ──────────────────────────────────────────────────────────────── -->
+<div class="d-flex align-center gap-3 mb-4 flex-wrap">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Outlined.AddCircleOutline"
+               OnClick="OpenCreateDialog">
+        New Job
+    </MudButton>
+    <MudButton Variant="Variant.Outlined" Color="Color.Default"
+               StartIcon="@Icons.Material.Outlined.Refresh"
+               OnClick="LoadAsync" Disabled="@_loading">
+        Refresh
+    </MudButton>
+    <MudSpacer />
+    <MudChip T="string"
+             Icon="@Icons.Material.Outlined.Api"
+             Color="Color.Tertiary" Size="Size.Small">
+        Endpoint: /api/jobmonitor/status
+    </MudChip>
+</div>
+
+<!-- ── Jobs table ─────────────────────────────────────────────────────────── -->
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+}
+
+<MudTable T="MonitoredJobDto" Items="_jobs" Dense="true" Striped="true" Hover="true"
+          Loading="@_loading" SortLabel="Sort By">
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<MonitoredJobDto, object>(x => x.Id)">ID</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MonitoredJobDto, object>(x => x.JobName)">Job Name</MudTableSortLabel></MudTh>
+        <MudTh>Project</MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MonitoredJobDto, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
+        <MudTh>Failure Reason</MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MonitoredJobDto, object>(x => x.StartedAt)">Started</MudTableSortLabel></MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Id</MudTd>
+        <MudTd>
+            <MudText Typo="Typo.body2" Style="font-weight:600;">@context.JobName</MudText>
+        </MudTd>
+        <MudTd>@(context.ProjectName ?? "—")</MudTd>
+        <MudTd>
+            <MudChip T="string" Color="@StatusColor(context.Status)" Size="Size.Small"
+                     Icon="@StatusIcon(context.Status)" Style="font-size:0.75rem;">
+                @context.Status
+            </MudChip>
+        </MudTd>
+        <MudTd>
+            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-error);">
+                @(context.FailureReason ?? "")
+            </MudText>
+        </MudTd>
+        <MudTd>
+            <MudText Typo="Typo.caption">@context.StartedAt.ToLocalTime().ToString("MM/dd HH:mm")</MudText>
+        </MudTd>
+        <MudTd>
+            <div class="d-flex gap-1">
+                @if (context.Status != "Failed")
+                {
+                    <MudTooltip Text="Simulate failure (injects sample log)">
+                        <MudIconButton Icon="@Icons.Material.Outlined.BugReport"
+                                       Color="Color.Error" Size="Size.Small"
+                                       OnClick="() => SimulateFailAsync(context)" />
+                    </MudTooltip>
+                }
+                @if (!string.IsNullOrWhiteSpace(context.Logs))
+                {
+                    <MudTooltip Text="View logs">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Article"
+                                       Color="Color.Info" Size="Size.Small"
+                                       OnClick="() => ShowLogs(context)" />
+                    </MudTooltip>
+                }
+                <MudTooltip Text="Delete">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                   Color="Color.Default" Size="Size.Small"
+                                   OnClick="() => DeleteJobAsync(context)" />
+                </MudTooltip>
+            </div>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Class="pa-4" Style="color:var(--mud-palette-text-secondary);">
+            No jobs yet. Click <strong>New Job</strong> to create one, or agents will populate this list automatically.
+        </MudText>
+    </NoRecordsContent>
+</MudTable>
+
+<!-- ── Create Job Dialog ─────────────────────────────────────────────────── -->
+<MudDialog @bind-Visible="_createDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudIcon Icon="@Icons.Material.Outlined.AddCircleOutline" Class="mr-2" Style="vertical-align:middle;" />
+        New Job Run
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_newJob.JobName" Label="Job Name *" Required="true"
+                              Placeholder="e.g. 344_bi_nerandomilast_targets_pipeline"
+                              Variant="Variant.Outlined" Dense="true" FullWidth="true" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_newJob.ProjectName" Label="Project Name"
+                              Placeholder="e.g. BI Targets"
+                              Variant="Variant.Outlined" Dense="true" FullWidth="true" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect @bind-Value="_newJob.Status" Label="Initial Status"
+                           Variant="Variant.Outlined" Dense="true" FullWidth="true">
+                    <MudSelectItem Value="@("Running")">Running</MudSelectItem>
+                    <MudSelectItem Value="@("Success")">Success</MudSelectItem>
+                    <MudSelectItem Value="@("Failed")">Failed</MudSelectItem>
+                    <MudSelectItem Value="@("Skipped")">Skipped</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3" Icon="@Icons.Material.Outlined.Lightbulb">
+            Create a job with <strong>Running</strong> status, then click the
+            <MudIcon Icon="@Icons.Material.Outlined.BugReport" Size="Size.Small" /> button to inject
+            realistic failure logs and trigger the Log Analysis workflow.
+        </MudAlert>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Outlined" OnClick="() => _createDialogOpen = false">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateJobAsync"
+                   Disabled="@(string.IsNullOrWhiteSpace(_newJob.JobName) || _saving)">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Create
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<!-- ── Logs Viewer Dialog ────────────────────────────────────────────────── -->
+<MudDialog @bind-Visible="_logsDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true })">
+    <TitleContent>
+        <MudIcon Icon="@Icons.Material.Outlined.Article" Class="mr-2" Style="vertical-align:middle;" />
+        Logs — @_logsJob?.JobName
+    </TitleContent>
+    <DialogContent>
+        <MudPaper Elevation="0" Style="background:#1a1a2e; border-radius:8px; padding:16px; max-height:500px; overflow-y:auto;">
+            <pre style="color:#e0e0e0; font-size:0.78rem; white-space:pre-wrap; margin:0;">@(_logsJob?.Logs ?? "No logs available.")</pre>
+        </MudPaper>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Outlined" OnClick="() => _logsDialogOpen = false">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+
+    private bool _loading = true;
+    private bool _saving  = false;
+    private List<MonitoredJobDto> _jobs   = [];
+    private JobMonitorStatusDto?  _status = null;
+
+    // Create dialog
+    private bool _createDialogOpen = false;
+    private CreateMonitoredJobRequest _newJob = new();
+
+    // Logs dialog
+    private bool _logsDialogOpen = false;
+    private MonitoredJobDto? _logsJob = null;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            var jobsTask   = JobMonitorService.GetJobsAsync();
+            var statusTask = JobMonitorService.GetStatusAsync();
+            await Task.WhenAll(jobsTask, statusTask);
+            _jobs   = jobsTask.Result;
+            _status = statusTask.Result;
+        }
+        catch { Snackbar.Add("Failed to load job monitor data.", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _newJob = new CreateMonitoredJobRequest { Status = "Running" };
+        _createDialogOpen = true;
+    }
+
+    private async Task CreateJobAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newJob.JobName)) return;
+        _saving = true;
+        try
+        {
+            var created = await JobMonitorService.CreateJobAsync(_newJob);
+            if (created is not null)
+            {
+                Snackbar.Add($"Job '{created.JobName}' created.", Severity.Success);
+                _createDialogOpen = false;
+                await LoadAsync();
+            }
+            else Snackbar.Add("Failed to create job.", Severity.Error);
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task SimulateFailAsync(MonitoredJobDto job)
+    {
+        var confirm = await JS.InvokeAsync<bool>("confirm",
+            $"Inject sample failure logs into '{job.JobName}'? This will set the status to Failed.");
+        if (!confirm) return;
+
+        try
+        {
+            var updated = await JobMonitorService.SimulateFailAsync(job.Id);
+            if (updated is not null)
+            {
+                Snackbar.Add($"Job '{job.JobName}' marked as Failed with sample logs.", Severity.Warning);
+                await LoadAsync();
+            }
+            else Snackbar.Add("Failed to simulate failure.", Severity.Error);
+        }
+        catch { Snackbar.Add("Error simulating failure.", Severity.Error); }
+    }
+
+    private void ShowLogs(MonitoredJobDto job)
+    {
+        _logsJob = job;
+        _logsDialogOpen = true;
+    }
+
+    private async Task DeleteJobAsync(MonitoredJobDto job)
+    {
+        var confirm = await JS.InvokeAsync<bool>("confirm", $"Delete job '{job.JobName}'?");
+        if (!confirm) return;
+
+        var ok = await JobMonitorService.DeleteJobAsync(job.Id);
+        if (ok)
+        {
+            Snackbar.Add($"Job '{job.JobName}' deleted.", Severity.Success);
+            await LoadAsync();
+        }
+        else Snackbar.Add("Failed to delete job.", Severity.Error);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static Color StatusColor(string status) => status switch
+    {
+        "Running" => Color.Warning,
+        "Success" => Color.Success,
+        "Failed"  => Color.Error,
+        "Skipped" => Color.Default,
+        _         => Color.Default,
+    };
+
+    private static string StatusIcon(string status) => status switch
+    {
+        "Running" => Icons.Material.Outlined.Pending,
+        "Success" => Icons.Material.Outlined.CheckCircle,
+        "Failed"  => Icons.Material.Outlined.ReportProblem,
+        "Skipped" => Icons.Material.Outlined.SkipNext,
+        _         => Icons.Material.Outlined.Circle,
+    };
+}

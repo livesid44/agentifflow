@@ -1,0 +1,460 @@
+/* ── Reset & base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Georama font (TechM Orion) ──────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Georama:ital,wdth,wght@0,75..125,100..900;1,75..125,100..900&display=swap');
+
+:root {
+  /* ── TechM Orion Brand colours ─────────────────────────────────────────── */
+  --primary:        #E31937;              /* TechM Red                      */
+  --primary-dark:   #C41030;              /* darker red — hover             */
+  --primary-light:  rgba(227,25,55,0.10); /* red tint   — subtle bg        */
+  --primary-ring:   rgba(227,25,55,0.22); /* focus ring                    */
+  --header-bg:      #213e55;              /* TechM teal header              */
+  --footer-bg:      #373737;              /* TechM dark footer              */
+  --dark-neutral:   #373737;              /* TechM dark neutral             */
+  --gold:           #fdbc5f;              /* TechM gold accent              */
+
+  /* ── Surface ────────────────────────────────────────────────────────────── */
+  --surface:        #ffffff;
+  --surface-alt:    #F8FAFC;
+  --surface-raised: #EEF2F7;
+  --border:         #E2E8F0;
+
+  /* ── Text ───────────────────────────────────────────────────────────────── */
+  --text-primary:   #0F172A;
+  --text-secondary: #475569;
+  --text-hint:      #94A3B8;
+
+  /* ── Semantic ───────────────────────────────────────────────────────────── */
+  --success:  #059669;
+  --error:    #DC2626;
+  --error-bg: #FEF2F2;
+
+  /* ── Shadows ────────────────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 6px  rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+  --shadow-lg: 0 20px 25px rgba(0,0,0,0.08), 0 10px 10px rgba(0,0,0,0.04);
+
+  /* ── Geometry ───────────────────────────────────────────────────────────── */
+  --radius:    10px;
+  --radius-sm:  6px;
+  font-size: 16px;
+}
+
+body {
+  font-family: 'Georama', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--surface-alt);
+  color: var(--text-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, box-shadow 0.18s, opacity 0.18s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-dark);
+  box-shadow: 0 4px 12px var(--primary-ring);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1.5px solid rgba(255,255,255,0.35);
+  color: rgba(255,255,255,0.85);
+}
+.btn-outline:hover:not(:disabled) { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.6); }
+
+.btn-secondary {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  color: var(--text-primary);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--surface-raised); }
+
+.btn-sm { padding: 5px 14px; font-size: 0.82rem; }
+.btn-loading { opacity: 0.8; }
+
+.btn-spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── NavBar (TechM Orion — teal header) ──────────────────────────────────── */
+.navbar {
+  background: var(--header-bg);
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+  padding: 0 28px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+/* Brand */
+.navbar-brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.navbar-brand-divider {
+  width: 1px; height: 22px;
+  background: rgba(255,255,255,0.22);
+  margin: 0 6px;
+}
+.navbar-title { font-size: 1rem; font-weight: 800; color: #fff; letter-spacing: -0.3px; }
+.navbar-subtitle { font-size: 0.68rem; color: rgba(255,255,255,0.50); font-weight: 400; letter-spacing: 0.5px; white-space: nowrap; }
+
+/* Nav pills (TechM style — frosted-glass pill container) */
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255,255,255,0.12);
+  padding: 4px 6px;
+  border-radius: 25px;
+  margin: 0 20px;
+  flex: 1;
+  max-width: 560px;
+}
+.navbar-link {
+  padding: 6px 20px;
+  border-radius: 20px;
+  font-size: 0.83rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.72);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.navbar-link:hover { background: rgba(255,255,255,0.14); color: #fff; }
+.navbar-link-active {
+  background: var(--dark-neutral) !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+
+/* User zone */
+.navbar-user { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.user-name { font-size: 0.85rem; color: rgba(255,255,255,0.70); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Login Page (TechM Orion inspired — dark + red) ─────────────────────── */
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 60fr 40fr;   /* 60 % visual / 40 % form */
+}
+
+/* ── Left: Dark AI Visual Panel ──────────────────────────────────────────── */
+.login-hero {
+  background: #0D0A0C;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+.login-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 100% 100%, rgba(227,25,55,0.38) 0%, transparent 55%),
+    radial-gradient(ellipse at 0% 90%,   rgba(160,10,50,0.22)  0%, transparent 45%),
+    radial-gradient(ellipse at 50% 50%,  rgba(80,10,30,0.32)   0%, transparent 70%);
+  z-index: 0;
+  pointer-events: none;
+}
+.login-hero-visual {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 40px;
+}
+
+/* ── Right: Dark Charcoal Form Panel ─────────────────────────────────────── */
+.login-panel {
+  background: #2D2D2D;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Corner logo (top-right) */
+.lp-logo {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  z-index: 2;
+}
+.lp-logo-text   { line-height: 1.1; }
+.lp-logo-line1  { display: block; font-size: 0.6rem;  font-weight: 800; color: rgba(255,255,255,0.9); letter-spacing: 1.5px; text-transform: uppercase; }
+.lp-logo-line2  { display: block; font-size: 0.68rem; font-weight: 400; color: rgba(255,255,255,0.45); }
+
+/* Body */
+.lp-body {
+  padding: 70px 44px 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.lp-mobile-logo  { display: none; justify-content: center; margin-bottom: 20px; }
+.lp-heading      { font-size: 2.6rem; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; line-height: 1.05; margin-bottom: 6px; }
+.lp-accent       { color: #E31937; }
+.lp-sub          { font-size: 1rem; color: rgba(255,255,255,0.82); font-weight: 500; margin-bottom: 4px; }
+.lp-tagline      { font-size: 0.88rem; color: rgba(255,255,255,0.4); margin-bottom: 22px; }
+.lp-divider      { border: none; border-top: 1px solid rgba(255,255,255,0.10); margin: 0 0 20px; }
+.lp-already      { font-size: 0.82rem; color: rgba(255,255,255,0.45); text-align: center; margin-bottom: 12px; }
+
+/* Red primary button */
+.btn-lp-primary {
+  width: 100%;
+  padding: 14px 20px;
+  background: #E31937;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: inherit;
+  letter-spacing: 0.01em;
+  transition: background 0.18s, box-shadow 0.18s;
+}
+.btn-lp-primary:hover:not(:disabled) { background: #C41030; box-shadow: 0 4px 14px rgba(227,25,55,0.4); }
+.btn-lp-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* OR divider */
+.lp-or { display: flex; align-items: center; gap: 12px; margin: 16px 0; font-size: 0.78rem; font-weight: 700; color: rgba(255,255,255,0.32); letter-spacing: 1px; }
+.lp-or::before,.lp-or::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.12); }
+
+/* New users section */
+.lp-create-title { font-size: 1.2rem; font-weight: 700; color: #fff; margin-bottom: 6px; }
+.lp-create-hint  { font-size: 0.82rem; color: rgba(255,255,255,0.48); line-height: 1.55; margin-bottom: 6px; }
+
+/* Dev-mode dark inputs */
+.lp-input { width: 100%; padding: 13px 16px; background: #404040; border: 1px solid #555; border-radius: 5px; color: #fff; font-size: 0.9rem; font-family: inherit; transition: border-color 0.15s; margin-bottom: 12px; }
+.lp-input::placeholder { color: rgba(255,255,255,0.3); }
+.lp-input:focus  { outline: none; border-color: rgba(255,255,255,0.45); }
+
+/* Dev warning */
+.lp-dev-warning { background: rgba(255,165,0,0.1); border: 1px solid rgba(255,165,0,0.28); border-radius: 5px; padding: 10px 14px; font-size: 0.8rem; color: rgba(255,200,80,0.85); margin-bottom: 14px; line-height: 1.45; }
+
+/* Security note */
+.lp-secure { margin-top: auto; padding-top: 16px; font-size: 0.74rem; color: rgba(255,255,255,0.28); text-align: center; display: flex; align-items: center; justify-content: center; gap: 5px; }
+
+/* Panel footer */
+.lp-footer { padding: 14px 44px 22px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.lp-footer-text { font-size: 0.77rem; color: rgba(255,255,255,0.5); line-height: 1.5; font-weight: 600; }
+.btn-lp-request { padding: 10px 18px; background: transparent; border: 1.5px solid rgba(255,255,255,0.38); border-radius: 5px; color: rgba(255,255,255,0.8); font-size: 0.8rem; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: inherit; transition: border-color 0.18s, background 0.18s, color 0.18s; }
+.btn-lp-request:hover { border-color: white; background: rgba(255,255,255,0.06); color: #fff; }
+
+/* ── Page container ──────────────────────────────────────────────────────── */
+.page-container { max-width: 820px; margin: 0 auto; padding: 32px 24px 80px; }
+.page-header { margin-bottom: 28px; }
+.page-title { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.5px; }
+.page-subtitle { color: var(--text-secondary); font-size: 0.93rem; margin-top: 6px; }
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+.tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 24px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { display: flex; align-items: center; gap: 6px; padding: 10px 18px; background: none; border: none; border-bottom: 3px solid transparent; margin-bottom: -2px; font-size: 0.88rem; font-weight: 500; color: var(--text-secondary); cursor: pointer; white-space: nowrap; transition: color 0.15s, border-color 0.15s; border-radius: var(--radius-sm) var(--radius-sm) 0 0; font-family: inherit; }
+.tab:hover { color: var(--primary); background: var(--primary-light); }
+.tab-active { color: var(--primary) !important; border-bottom-color: var(--primary) !important; font-weight: 600; }
+
+/* ── Config Section ──────────────────────────────────────────────────────── */
+.config-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 24px; box-shadow: var(--shadow-sm); }
+.config-section-header { display: flex; align-items: flex-start; gap: 16px; padding: 20px 24px; background: var(--surface-alt); border-bottom: 1px solid var(--border); }
+.config-section-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: var(--primary-light); border-radius: var(--radius-sm); flex-shrink: 0; }
+.config-section-title { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
+.config-section-desc { font-size: 0.85rem; color: var(--text-secondary); }
+.config-section-body { padding: 24px; display: grid; gap: 20px; }
+
+/* ── Form Fields ─────────────────────────────────────────────────────────── */
+.form-field { display: flex; flex-direction: column; gap: 6px; }
+.form-label { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); }
+.required-mark { color: var(--error); }
+.form-input { padding: 10px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem; color: var(--text-primary); background: var(--surface); transition: border-color 0.15s, box-shadow 0.15s; width: 100%; font-family: inherit; }
+.form-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
+.form-input::placeholder { color: var(--text-hint); }
+.form-hint { font-size: 0.78rem; color: var(--text-hint); }
+
+/* ── Footer / Save ───────────────────────────────────────────────────────── */
+.config-footer { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; margin-top: 8px; }
+.saved-at { font-size: 0.8rem; color: var(--text-hint); }
+
+/* ── Alerts ──────────────────────────────────────────────────────────────── */
+.alert { padding: 12px 16px; border-radius: var(--radius-sm); font-size: 0.88rem; }
+.alert-error { background: var(--error-bg); color: var(--error); border: 1px solid #FECACA; }
+.alert-success { background: #ECFDF5; color: var(--success); border: 1px solid #A7F3D0; }
+.mb-4 { margin-bottom: 16px; }
+
+/* ── Loading spinner ─────────────────────────────────────────────────────── */
+.loading-spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 80px auto; }
+
+/* ── Navbar nav links ────────────────────────────────────────────────────── */
+/* (overridden above in .navbar-links section) */
+
+/* ── Dashboard stat cards ────────────────────────────────────────────────── */
+.dash-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.dash-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.dash-card-icon { font-size: 2rem; flex-shrink: 0; }
+.dash-card-label { font-size: 0.72rem; color: var(--text-hint); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.dash-card-value { font-size: 1.4rem; font-weight: 800; color: var(--text-primary); }
+
+/* ── Activity log table ──────────────────────────────────────────────────── */
+.activity-log-table {
+  overflow-x: auto;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.activity-log-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+.activity-log-table th {
+  background: var(--surface-alt);
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.70rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-secondary);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-family: inherit;
+}
+.activity-log-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.activity-log-table tr:last-child td { border-bottom: none; }
+.activity-log-table tr:hover td { background: var(--primary-light); }
+.log-ts     { font-family: monospace; font-size: 0.78rem; color: var(--text-hint); white-space: nowrap; }
+.log-event  { font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+.log-detail { color: var(--text-secondary); font-size: 0.81rem; }
+.log-badge  {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+/* ── App footer (TechM Orion dark) ──────────────────────────────────────── */
+.app-footer {
+  background: var(--footer-bg);
+  margin-top: 40px;
+  padding: 0;
+}
+.app-footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 32px;
+  flex-wrap: wrap;
+  border-top: 2px solid rgba(255,255,255,0.06);
+}
+.app-footer-text {
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.50);
+  font-family: inherit;
+  letter-spacing: 0.2px;
+}
+.app-footer-text strong { color: rgba(255,255,255,0.88); font-weight: 700; }
+.app-footer-divider {
+  width: 1px; height: 14px;
+  background: rgba(255,255,255,0.16);
+  margin: 0 4px;
+}
+.app-footer-copy {
+  font-size: 0.74rem;
+  color: rgba(255,255,255,0.28);
+  font-family: inherit;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .login-page { grid-template-columns: 55fr 45fr; }
+}
+
+@media (max-width: 768px) {
+  .login-page { grid-template-columns: 1fr; }
+  .login-hero  { min-height: 45vh; }
+  .lp-body     { padding: 60px 28px 20px; }
+  .lp-footer   { padding: 14px 28px 20px; flex-direction: column; align-items: flex-start; }
+  .lp-mobile-logo { display: flex; }
+  .lp-heading  { font-size: 2rem; }
+  .navbar-links { display: none; }
+}
+
+@media (max-width: 600px) {
+  .navbar { padding: 0 16px; }
+  .page-container { padding: 20px 16px 60px; }
+  .lp-body     { padding: 56px 20px 16px; }
+  .lp-footer   { padding: 14px 20px 20px; }
+  .config-section-body { padding: 16px; }
+  .config-section-header { padding: 16px; }
+  .config-footer { align-items: stretch; }
+  .tab { padding: 10px 12px; font-size: 0.8rem; }
+  .user-name { display: none; }
+}

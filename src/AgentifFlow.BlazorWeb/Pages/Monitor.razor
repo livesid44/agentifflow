@@ -1,0 +1,598 @@
+@page "/"
+@page "/monitor"
+@attribute [Authorize]
+@inject IBlobJobApiService JobService
+@inject IAgentApiService AgentService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IConfiguration Config
+@implements IAsyncDisposable
+@using Microsoft.AspNetCore.SignalR.Client
+
+<PageTitle>Dashboard</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-1" Style="font-weight:700; letter-spacing:-0.5px;">
+    <MudIcon Icon="@Icons.Material.Outlined.SpaceDashboard" Class="mr-2" Style="vertical-align:middle;" />
+    Dashboard
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-6" Style="color:var(--mud-palette-text-secondary);">
+    Real-time view of all agent jobs and API activity. Refreshes every 15 seconds.
+</MudText>
+
+<!-- ── Summary cards ──────────────────────────────────────────────────────── -->
+<MudGrid Spacing="3" Class="mb-6">
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.TaskAlt" Color="Color.Success" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_completed</MudText>
+            <MudText Typo="Typo.caption">Completed</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.Pending" Color="Color.Warning" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_inProgress</MudText>
+            <MudText Typo="Typo.caption">In Progress</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.ReportProblem" Color="Color.Error" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_failed</MudText>
+            <MudText Typo="Typo.caption">Failed</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudPaper Elevation="2" Class="pa-4 text-center rounded-lg">
+            <MudIcon Icon="@Icons.Material.Outlined.Approval" Color="Color.Info" Size="Size.Large" />
+            <MudText Typo="Typo.h4" Style="font-weight:700;">@_awaitingApproval</MudText>
+            <MudText Typo="Typo.caption">Awaiting Approval</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- ── Toolbar ────────────────────────────────────────────────────────────── -->
+<div class="d-flex align-center gap-3 mb-4 flex-wrap">
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+               StartIcon="@Icons.Material.Outlined.Refresh"
+               OnClick="LoadJobsAsync" Disabled="@_loading">
+        Refresh
+    </MudButton>
+    <!-- Agent filter -->
+    @if (_agents.Count > 0)
+    {
+        <MudSelect T="int?" Value="_selectedAgentId" ValueChanged="OnAgentFilterChanged"
+                   Label="Filter by Agent" Variant="Variant.Outlined" Dense="true"
+                   Style="min-width:180px;" Clearable="true">
+            <MudSelectItem T="int?" Value="@((int?)null)">All Agents</MudSelectItem>
+            <MudSelectItem T="int?" Value="@((int?)-1)">Legacy (no agent)</MudSelectItem>
+            @foreach (var a in _agents)
+            {
+                <MudSelectItem T="int?" Value="@((int?)a.Id)">@a.Name</MudSelectItem>
+            }
+        </MudSelect>
+    }
+    <!-- SignalR live indicator -->
+    <MudTooltip Text="@(_hubConnected ? "Live updates active" : "Live updates disconnected — polling every 15 s")">
+        <MudChip T="string"
+                 Icon="@(_hubConnected ? Icons.Material.Outlined.Sensors : Icons.Material.Outlined.SensorsOff)"
+                 Color="@(_hubConnected ? Color.Success : Color.Warning)"
+                 Size="Size.Small"
+                 Text="@(_hubConnected ? "Live" : "Polling")" />
+    </MudTooltip>
+    @if (_jobs.Any(j => j.BlobName == StartupProbeBlobName))
+    {
+        <MudTooltip Text="Startup-probe jobs run automatically on every application start to verify agent configuration. They are shown separately as status banners above the table.">
+            <MudChip T="string"
+                     Icon="@Icons.Material.Outlined.Info"
+                     Color="Color.Info"
+                     Size="Size.Small"
+                     Text="Startup probes hidden" />
+        </MudTooltip>
+    }
+    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-disabled);">
+        @if (_lastRefresh.HasValue)
+        {
+            <span>Last refresh: @_lastRefresh.Value.ToLocalTime().ToString("HH:mm:ss")</span>
+        }
+    </MudText>
+</div>
+
+<!-- ── Jobs Table ─────────────────────────────────────────────────────────── -->
+@if (_loading && _jobs.Count == 0)
+{
+    <div class="d-flex justify-center mt-8">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    </div>
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_jobs.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">
+        No jobs found. Enable at least one agent on the <MudLink Href="/agents">Agents</MudLink> page to start polling.
+        Startup probe jobs will appear here automatically on the next application start.
+    </MudAlert>
+}
+else
+{
+    @* ── Startup-probe failure banners ──────────────────────────────────────── *@
+    @foreach (var probe in _failedStartupProbes)
+    {
+        var agentLabel = probe.AgentId.HasValue
+            ? (_agents.FirstOrDefault(a => a.Id == probe.AgentId.Value)?.Name ?? $"Agent #{probe.AgentId}")
+            : "Agent";
+        <MudAlert Severity="Severity.Error" Class="mb-3" Icon="@Icons.Material.Outlined.Warning">
+            <strong>@agentLabel — Startup probe failed:</strong> @probe.ErrorMessage
+            &nbsp;<MudLink Href="/configuration">Go to Integration Settings →</MudLink>
+        </MudAlert>
+    }
+
+    <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight:700;">Agent Jobs</MudText>
+    <MudTable Items="_filteredJobs" Hover="true" Dense="true" Striped="true"
+              SortLabel="Sort By" Elevation="2" Class="mb-8">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<BlobWatcherJobDto, object>(x => x.DetectedAt)">Detected</MudTableSortLabel></MudTh>
+            <MudTh>Agent</MudTh>
+            <MudTh>Blob Name</MudTh>
+            <MudTh>Container</MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<BlobWatcherJobDto, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
+            <MudTh>Ref</MudTh>
+            <MudTh>Retries</MudTh>
+            <MudTh>Rows Inserted</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Detected">@context.DetectedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+            <MudTd DataLabel="Agent">
+                @if (context.AgentId.HasValue)
+                {
+                    var agentName = _agents.FirstOrDefault(a => a.Id == context.AgentId.Value)?.Name ?? $"#{context.AgentId}";
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Text="@agentName" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-disabled);">Legacy</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Blob Name">
+                <MudText Style="font-family:monospace; font-size:.85em;">@context.BlobName</MudText>
+            </MudTd>
+            <MudTd DataLabel="Container">@(context.ContainerName ?? "—")</MudTd>
+            <MudTd DataLabel="Status">@StatusChip(context.Status)</MudTd>
+            <MudTd DataLabel="Ref">
+                @if (!string.IsNullOrEmpty(context.NotificationRef))
+                {
+                    <MudTooltip Text="@(string.IsNullOrEmpty(context.UserReply) ? "Awaiting reply on this reference thread" : "Reply received — click Info to read it")">
+                        <MudChip T="string" Text="@context.NotificationRef" Size="Size.Small"
+                                 Icon="@(string.IsNullOrEmpty(context.UserReply) ? Icons.Material.Outlined.ScheduleSend : Icons.Material.Outlined.MarkEmailRead)"
+                                 Color="@(string.IsNullOrEmpty(context.UserReply) ? Color.Warning : Color.Success)" />
+                    </MudTooltip>
+                }
+                else
+                {
+                    <span style="color:var(--mud-palette-text-disabled)">—</span>
+                }
+            </MudTd>
+            <MudTd DataLabel="Retries">@context.RetryCount</MudTd>
+            <MudTd DataLabel="Rows Inserted">@(context.RowsInserted?.ToString() ?? "—")</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="1">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Info" Size="Size.Small"
+                                   OnClick="() => ShowLog(context)"
+                                   title="View log" />
+                    @if (context.Status is "AwaitingApproval" or "ValidationFailed")
+                    {
+                        <MudIconButton Icon="@Icons.Material.Outlined.CheckCircleOutline" Color="Color.Success"
+                                       Size="Size.Small"
+                                       OnClick="() => ApproveAsync(context.Id)"
+                                       title="Approve for retry" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.Cancel" Color="Color.Error"
+                                       Size="Size.Small"
+                                       OnClick="() => RejectAsync(context.Id)"
+                                       title="Reject" />
+                    }
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    <!-- ── Activity Log ───────────────────────────────────────────────────── -->
+    <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight:700;">Activity Log</MudText>
+    <MudPaper Elevation="2" Class="pa-0 rounded-lg" Style="overflow:hidden;">
+        <MudTable Items="_activityLog" Hover="true" Dense="true" Elevation="0"
+                  Style="max-height:380px; overflow-y:auto;">
+            <HeaderContent>
+                <MudTh Style="width:160px;">Timestamp</MudTh>
+                <MudTh Style="width:120px;">Source</MudTh>
+                <MudTh Style="width:130px;">Event</MudTh>
+                <MudTh>Details</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Timestamp">
+                    <MudText Typo="Typo.caption" Style="font-family:monospace;">
+                        @context.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Source">
+                    <MudChip T="string" Text="@context.Source" Size="Size.Small"
+                             Color="@SourceColor(context.Source)" />
+                </MudTd>
+                <MudTd DataLabel="Event">
+                    <MudText Typo="Typo.body2" Style="font-weight:600;">@context.Event</MudText>
+                </MudTd>
+                <MudTd DataLabel="Details">
+                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary); white-space:pre-wrap;">
+                        @context.Details
+                    </MudText>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+}
+
+<!-- ── Log Detail Dialog ─────────────────────────────────────────────────── -->
+<MudDialog @bind-Visible="_logDialogVisible">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Outlined.Assignment" Class="mr-2" />
+            Job Log — @_selectedJob?.BlobName
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_selectedJob is not null)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Status: <strong>@_selectedJob.Status</strong></MudText>
+
+            @if (!string.IsNullOrEmpty(_selectedJob.NotificationRef))
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    <strong>Notification Reference:</strong> @_selectedJob.NotificationRef
+                    — The agent sent an alert email with this token in the subject line and is
+                    monitoring the inbox for a reply on that thread.
+                </MudAlert>
+            }
+
+            @if (!string.IsNullOrEmpty(_selectedJob.UserReply))
+            {
+                <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">
+                    <strong>Reply received:</strong><br />
+                    <pre style="font-size:.85em; white-space:pre-wrap; margin:4px 0 0;">@_selectedJob.UserReply</pre>
+                </MudAlert>
+            }
+
+            @if (!string.IsNullOrEmpty(_selectedJob.ErrorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_selectedJob.ErrorMessage</MudAlert>
+            }
+            <MudPaper Elevation="0" Style="background:var(--mud-palette-background-grey); border-radius:8px; max-height:320px; overflow-y:auto;">
+                <pre style="padding:12px; font-size:.8em; white-space:pre-wrap; margin:0;">@(string.IsNullOrWhiteSpace(_selectedJob.LogDetails) ? "(no log entries)" : _selectedJob.LogDetails)</pre>
+            </MudPaper>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _logDialogVisible = false">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    // Must match AgentSeedService.StartupProbeBlobName in AgentifFlow.Api.
+    private const string StartupProbeBlobName = "[startup-probe]";
+
+    private List<BlobWatcherJobDto> _jobs = [];
+    /// <summary>Jobs excluding startup-probe entries (those are shown separately as banners).</summary>
+    private IEnumerable<BlobWatcherJobDto> _nonProbeJobs => _jobs.Where(j => j.BlobName != StartupProbeBlobName);
+
+    private List<BlobWatcherJobDto> _filteredJobs => _selectedAgentId switch
+    {
+        null   => _nonProbeJobs.ToList(),
+        -1     => _nonProbeJobs.Where(j => j.AgentId == null).ToList(),
+        { } id => _nonProbeJobs.Where(j => j.AgentId == id).ToList(),
+    };
+
+    /// <summary>Most-recent startup-probe job per agent that has status "Failed".</summary>
+    private List<BlobWatcherJobDto> _failedStartupProbes => _jobs
+        .Where(j => j.BlobName == StartupProbeBlobName && j.Status == "Failed")
+        .GroupBy(j => j.AgentId)
+        .Select(g => g.OrderByDescending(j => j.DetectedAt).First())
+        .ToList();
+
+    private List<ActivityLogEntry> _activityLog = [];
+    private bool _loading;
+    private string? _error;
+    private DateTime? _lastRefresh;
+    private Timer? _refreshTimer;
+
+    private bool _logDialogVisible;
+    private BlobWatcherJobDto? _selectedJob;
+
+    // Agent filter
+    private List<AgentDto> _agents = [];
+    private int? _selectedAgentId;
+
+    // Summary counts
+    private int _completed;
+    private int _inProgress;
+    private int _failed;
+    private int _awaitingApproval;
+
+    // SignalR
+    private HubConnection? _hubConnection;
+    private bool _hubConnected;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadJobsAsync(), LoadAgentsAsync());
+        await ConnectSignalRAsync();
+
+        // Fallback polling — keeps data fresh if SignalR is disconnected.
+        _refreshTimer = new Timer(async _ =>
+        {
+            await LoadJobsAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+    }
+
+    // ── SignalR ───────────────────────────────────────────────────────────────
+
+    private async Task ConnectSignalRAsync()
+    {
+        try
+        {
+            var apiBase = Config["ApiConfig:BaseUrl"] ?? "http://localhost:5045";
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl($"{apiBase}/hubs/agent")
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<BlobWatcherJobDto>("JobCreated", OnJobCreated);
+            _hubConnection.On<BlobWatcherJobDto>("JobUpdated", OnJobUpdated);
+
+            _hubConnection.Reconnecting  += _ => { _hubConnected = false; InvokeAsync(StateHasChanged); return Task.CompletedTask; };
+            _hubConnection.Reconnected   += _ => { _hubConnected = true;  InvokeAsync(StateHasChanged); return Task.CompletedTask; };
+            _hubConnection.Closed        += _ => { _hubConnected = false; InvokeAsync(StateHasChanged); return Task.CompletedTask; };
+
+            await _hubConnection.StartAsync();
+            _hubConnected = true;
+        }
+        catch
+        {
+            // SignalR is optional — fall back to polling if the hub is unreachable.
+            _hubConnected = false;
+        }
+    }
+
+    private void OnJobCreated(BlobWatcherJobDto dto)
+    {
+        InvokeAsync(() =>
+        {
+            // Prepend to list so newest is first.
+            _jobs.Insert(0, dto);
+            _lastRefresh = DateTime.UtcNow;
+            ComputeSummary();
+            BuildActivityLog();
+
+            Snackbar.Add($"New job detected: {dto.BlobName}", Severity.Info,
+                cfg => { cfg.ShowCloseIcon = true; cfg.VisibleStateDuration = 4000; });
+            StateHasChanged();
+        });
+    }
+
+    private void OnJobUpdated(BlobWatcherJobDto dto)
+    {
+        InvokeAsync(() =>
+        {
+            var idx = _jobs.FindIndex(j => j.Id == dto.Id);
+            if (idx >= 0)
+                _jobs[idx] = dto;
+            else
+                _jobs.Insert(0, dto);
+
+            _lastRefresh = DateTime.UtcNow;
+            ComputeSummary();
+            BuildActivityLog();
+
+            // Show prominent snackbar only for key status transitions.
+            var (msg, sev) = dto.Status switch
+            {
+                "Completed"        => ($"✅ Job completed: {dto.BlobName} ({dto.RowsInserted} rows)",  Severity.Success),
+                "Failed"           => ($"❌ Job failed: {dto.BlobName}",                               Severity.Error),
+                "ValidationFailed" => ($"⚠️ Validation failed: {dto.BlobName}",                       Severity.Warning),
+                "AwaitingApproval" => ($"🔔 Awaiting approval: {dto.BlobName}",                        Severity.Info),
+                "ReplyReceived"    => ($"📧 Reply received for: {dto.BlobName}",                       Severity.Success),
+                _ => (null, Severity.Normal)
+            };
+            if (msg is not null)
+                Snackbar.Add(msg, sev, cfg => { cfg.ShowCloseIcon = true; cfg.VisibleStateDuration = 5000; });
+
+            // If log dialog is open for this job, refresh the selected job data.
+            if (_logDialogVisible && _selectedJob?.Id == dto.Id)
+                _selectedJob = dto;
+
+            StateHasChanged();
+        });
+    }
+
+    // ── Data loading ──────────────────────────────────────────────────────────
+
+    private async Task LoadJobsAsync()
+    {
+        _loading = true;
+        _error   = null;
+        try
+        {
+            _jobs        = await JobService.GetJobsAsync(100);
+            _lastRefresh = DateTime.UtcNow;
+            ComputeSummary();
+            BuildActivityLog();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load jobs: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadAgentsAsync()
+    {
+        try { _agents = await AgentService.GetAllAsync(); }
+        catch { /* non-critical — just hides the filter */ }
+    }
+
+    private void OnAgentFilterChanged(int? agentId)
+    {
+        _selectedAgentId = agentId;
+        StateHasChanged();
+    }
+
+    private void ComputeSummary()
+    {
+        // Exclude startup-probe jobs from summary counts — they are shown in their own banners.
+        _completed        = _nonProbeJobs.Count(j => j.Status == "Completed");
+        _inProgress       = _nonProbeJobs.Count(j => j.Status is "Detected" or "Validating" or "Inserting" or "Retrying");
+        _failed           = _nonProbeJobs.Count(j => j.Status is "Failed" or "Rejected");
+        _awaitingApproval = _nonProbeJobs.Count(j => j.Status is "AwaitingApproval" or "ValidationFailed" or "ReplyReceived");
+    }
+
+    private void BuildActivityLog()
+    {
+        var entries = new List<ActivityLogEntry>();
+
+        foreach (var job in _jobs)
+        {
+            // Startup-probe events get their own source label
+            if (job.BlobName == StartupProbeBlobName)
+            {
+                var agentLabel = job.AgentId.HasValue
+                    ? (_agents.FirstOrDefault(a => a.Id == job.AgentId.Value)?.Name ?? $"Agent #{job.AgentId}")
+                    : "Agent";
+                var probeDetail = job.Status == "Failed"
+                    ? $"{agentLabel} — {job.ErrorMessage ?? "startup probe failed"}"
+                    : $"{agentLabel} — startup probe: agent is active";
+                entries.Add(new ActivityLogEntry(
+                    job.DetectedAt, "Startup", job.Status == "Failed" ? "Config Error" : "Ready", probeDetail));
+                continue;
+            }
+
+            // Blob detected event
+            entries.Add(new ActivityLogEntry(
+                job.DetectedAt, "Blob Watcher", "Detected",
+                $"New blob: {job.BlobName}" + (job.ContainerName is not null ? $" (container: {job.ContainerName})" : "")));
+
+            // Status completion / failure event
+            if (job.Status is "Completed" or "Failed" or "Rejected")
+            {
+                var ts = job.CompletedAt ?? job.UpdatedAt;
+                var ev = job.Status == "Completed" ? "Completed" : "Failed";
+                var detail = job.Status == "Completed"
+                    ? $"Rows inserted: {job.RowsInserted?.ToString() ?? "—"}"
+                    : job.ErrorMessage ?? "See job log for details";
+                entries.Add(new ActivityLogEntry(ts, "Agent", ev, $"{job.BlobName} — {detail}"));
+            }
+
+            // API call log lines (lines starting with "API" or containing "Graph", "OpenAI", "SQL")
+            if (!string.IsNullOrWhiteSpace(job.LogDetails))
+            {
+                foreach (var line in job.LogDetails.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var trimmed = line.Trim();
+                    if (trimmed.Contains("API", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.Contains("Graph", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.Contains("OpenAI", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.Contains("SQL", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.Contains("LLM", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.Contains("Mail", StringComparison.OrdinalIgnoreCase))
+                    {
+                        entries.Add(new ActivityLogEntry(
+                            job.UpdatedAt, "API Call", "Log Entry", trimmed));
+                    }
+                }
+            }
+
+            // Retry events
+            if (job.RetryCount > 0)
+                entries.Add(new ActivityLogEntry(job.UpdatedAt, "Agent", "Retry",
+                    $"{job.BlobName} — retry #{job.RetryCount}"));
+        }
+
+        _activityLog = [.. entries.OrderByDescending(e => e.Timestamp)];
+    }
+
+    private void ShowLog(BlobWatcherJobDto job)
+    {
+        _selectedJob      = job;
+        _logDialogVisible = true;
+    }
+
+    private async Task ApproveAsync(int id)
+    {
+        try
+        {
+            await JobService.ApproveJobAsync(id);
+            Snackbar.Add("Job approved for retry.", Severity.Success);
+            await LoadJobsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Approve failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RejectAsync(int id)
+    {
+        try
+        {
+            await JobService.RejectJobAsync(id);
+            Snackbar.Add("Job rejected.", Severity.Warning);
+            await LoadJobsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Reject failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private RenderFragment StatusChip(string status) => builder =>
+    {
+        var (color, icon) = status switch
+        {
+            "Completed"        => (Color.Success,   Icons.Material.Outlined.TaskAlt),
+            "Failed"           => (Color.Error,     Icons.Material.Outlined.ReportProblem),
+            "Rejected"         => (Color.Dark,      Icons.Material.Outlined.DoDisturbAlt),
+            "ValidationFailed" => (Color.Warning,   Icons.Material.Outlined.FactCheck),
+            "AwaitingApproval" => (Color.Info,      Icons.Material.Outlined.Approval),
+            "ReplyReceived"    => (Color.Success,   Icons.Material.Outlined.MarkEmailRead),
+            "Retrying"         => (Color.Secondary, Icons.Material.Outlined.Autorenew),
+            _                  => (Color.Default,   Icons.Material.Outlined.Pending)
+        };
+        builder.OpenComponent<MudChip<string>>(0);
+        builder.AddAttribute(1, "Text", status);
+        builder.AddAttribute(2, "Color", color);
+        builder.AddAttribute(3, "Icon", icon);
+        builder.AddAttribute(4, "Size", Size.Small);
+        builder.CloseComponent();
+    };
+
+    private static Color SourceColor(string source) => source switch
+    {
+        "API Call"     => Color.Secondary,
+        "Blob Watcher" => Color.Info,
+        "Agent"        => Color.Primary,
+        "Startup"      => Color.Warning,
+        _              => Color.Default,
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        _refreshTimer?.Dispose();
+        if (_hubConnection is not null)
+            await _hubConnection.DisposeAsync();
+    }
+
+    private record ActivityLogEntry(DateTime Timestamp, string Source, string Event, string Details);
+}

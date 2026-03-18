@@ -1,0 +1,8 @@
+DiseaseCode,DiseaseName,ICD10Code,Indication,Stage,Prevalence_Rate_per_100k,StudyInclusion,Excluded,PatientCount,MeanAge,FemalePct,MalePct,MedianFVC_Pct,MedianDLCO_Pct,BaselineMRC_Score,TrialVariant
+DIS-001,Idiopathic Pulmonary Fibrosis,J84.112,IPF,Mild-Moderate,20.0,Yes,No,87,67.4,31.0,69.0,72.0,48.5,2.8,NerandomilastArm
+DIS-002,Idiopathic Pulmonary Fibrosis,J84.112,IPF,Mild-Moderate,20.0,Yes,No,85,66.9,29.0,71.0,70.5,47.2,2.9,PlaceboArm
+DIS-003,Hypersensitivity Pneumonitis,J67.9,HP,Moderate,8.0,No,Yes,0,58.2,52.0,48.0,,,,
+DIS-004,Non-Specific Interstitial Pneumonia,J84.113,NSIP,Mild,12.0,No,Yes,0,60.1,61.0,39.0,,,,
+DIS-005,Connective Tissue Disease-ILD,M35.0+J99,CTD-ILD,Mild-Moderate,6.0,No,Yes,0,55.4,74.0,26.0,,,,
+DIS-006,Combined Pulmonary Fibrosis and Emphysema,J84.1,CPFE,Moderate,3.5,No,Yes,0,70.2,18.0,82.0,,,,
+DIS-007,IPF with Acute Exacerbation History,J84.112,IPF-AE,Severe,5.0,No,Yes,0,72.3,25.0,75.0,,,,
