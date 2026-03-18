@@ -3,25 +3,31 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using AgentifFlow.Api.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AgentifFlow.Api.Services;
 
 /// <summary>
-/// Development-only authentication service.
+/// Local authentication service.
 /// Validates a single configured username/password pair and issues a short-lived JWT.
-/// The service is a no-op when <c>DevAuth:Enabled</c> is false.
+/// The service is a no-op when <c>DevAuth:Enabled</c> is false or credentials are absent.
 /// </summary>
 public class LocalAuthService : ILocalAuthService
 {
-    // Token lifetime: 8 hours — long enough for a full dev day without re-login.
+    // Token lifetime: 8 hours — long enough for a full working day without re-login.
     private const int TokenExpiryMinutes = 480;
+
+    // Default values shipped in appsettings.json — warn operators if unchanged.
+    private const string DefaultUsername   = "admin";
+    private const string DefaultPassword   = "Admin@123";
+    private const string DefaultSigningKey = "AgentifFlowLocalAuthSigningKey_ChangeBeforeDeployment!!";
 
     private readonly string? _username;
     private readonly string? _password;
     private readonly byte[]? _signingKeyBytes;
 
-    public LocalAuthService(IConfiguration configuration)
+    public LocalAuthService(IConfiguration configuration, ILogger<LocalAuthService> logger)
     {
         var section = configuration.GetSection("DevAuth");
         if (!section.GetValue<bool>("Enabled")) return;
@@ -32,7 +38,23 @@ public class LocalAuthService : ILocalAuthService
         var keyStr = section["JwtSigningKey"];
         if (!string.IsNullOrWhiteSpace(keyStr))
             _signingKeyBytes = Encoding.UTF8.GetBytes(keyStr);
+
+        // Warn operators when default / placeholder credentials are still in use.
+        if (_username == DefaultUsername || _password == DefaultPassword)
+            logger.LogWarning(
+                "DevAuth is using default credentials (admin/Admin@123). " +
+                "Change Username and Password in appsettings.json → DevAuth before going live.");
+
+        if (keyStr == DefaultSigningKey)
+            logger.LogWarning(
+                "DevAuth is using the default JWT signing key. " +
+                "Set a unique, random JwtSigningKey in appsettings.json → DevAuth before going live.");
     }
+
+    /// <inheritdoc />
+    public bool IsEnabled => _signingKeyBytes is not null
+                             && !string.IsNullOrEmpty(_username)
+                             && !string.IsNullOrEmpty(_password);
 
     /// <inheritdoc />
     public LocalLoginResponse? Authenticate(string username, string password)
